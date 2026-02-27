@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<openbox_menu xmlns="http://openbox.org/3.4/menu">
+  <menu id="root-menu" label="CRIXA Menu">
+    <item label="Applications">
+      <action name="Execute">
+        <command>crixa-menu</command>
+      </action>
+    </item>
+    <separator/>
+    <item label="Terminal">
+      <action name="Execute">
+        <command>crixa-terminal</command>
+      </action>
+    </item>
+    <item label="Browser">
+      <action name="Execute">
+        <command>crixa-browser</command>
+      </action>
+    </item>
+    <item label="YouTube">
+      <action name="Execute">
+        <command>crixa-browser https://www.youtube.com</command>
+      </action>
+    </item>
+    <item label="Files">
+      <action name="Execute">
+        <command>crixa-files</command>
+      </action>
+    </item>
+    <item label="Wallpapers">
+      <action name="Execute">
+        <command>crixa-files /usr/share/backgrounds/crixa</command>
+      </action>
+    </item>
+    <item label="CRIXA Settings">
+      <action name="Execute">
+        <command>crixa-settings</command>
+      </action>
+    </item>
+    <item label="Install CRIXA to Disk">
+      <action name="Execute">
+        <command>crixa-installer</command>
+      </action>
+    </item>
+    <item label="CRIXA Store">
+      <action name="Execute">
+        <command>crixa-store</command>
+      </action>
+    </item>
+    <item label="CRIXA Updater">
+      <action name="Execute">
+        <command>crixa-updater</command>
+      </action>
+    </item>
+    <item label="Wayland Track">
+      <action name="Execute">
+        <command>crixa-wayland-control</command>
+      </action>
+    </item>
+    <item label="Task Manager">
+      <action name="Execute">
+        <command>crixa-task-manager</command>
+      </action>
+    </item>
+    <separator/>
+    <item label="Reconfigure Openbox">
+      <action name="Reconfigure"/>
+    </item>
+    <item label="Restart Session">
+      <action name="Restart"/>
+    </item>
+    <item label="Power Off">
+      <action name="Execute">
+        <command>systemctl poweroff</command>
+      </action>
+    </item>
+  </menu>
+</openbox_menu>

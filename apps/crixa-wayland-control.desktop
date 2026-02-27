@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=CRIXA Wayland Track
+Comment=Toggle CRIXA session mode between stable X11 and Wayland preview
+Exec=crixa-wayland-control
+Icon=crixa-wayland-control
+Terminal=false
+Categories=System;Settings;
+StartupNotify=true

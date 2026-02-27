@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=CRIXA Wayland (Preview)
+Comment=CRIXA experimental Wayland session
+Exec=crixa-wayland-session
+Type=Application
+DesktopNames=CRIXA-Wayland

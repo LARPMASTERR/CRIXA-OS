@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=CRIXA Updater
+Comment=Atomic updater with rollback snapshots and channel rollout controls
+Exec=crixa-updater
+Icon=crixa-updater
+Terminal=false
+Categories=System;Settings;
+StartupNotify=true

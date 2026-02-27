@@ -1,0 +1,53 @@
+CRIXA OS v0 wallpaper source
+============================
+
+File: earthrise_print.jpg
+Saved as: crixa-wallpaper.jpg
+Source URL:
+https://svs.gsfc.nasa.gov/vis/a000000/a004500/a004593/earthrise_print.jpg
+
+Provider: NASA Scientific Visualization Studio
+Source page:
+https://svs.gsfc.nasa.gov/4593
+
+Usage note:
+NASA imagery is generally public domain in the United States.
+
+Additional wallpapers
+=====================
+
+Saved as: crixa-wallpaper-orbit.jpg
+Source URL:
+https://images-assets.nasa.gov/image/PIA12235/PIA12235~orig.jpg
+
+Saved as: crixa-wallpaper-nebula.jpg
+Source URL:
+https://images-assets.nasa.gov/image/PIA18033/PIA18033~orig.jpg
+
+Saved as: crixa-wallpaper-planet.jpg
+Source URL:
+https://images-assets.nasa.gov/image/PIA03149/PIA03149~orig.jpg
+
+Saved as: crixa-wallpaper-saturn.jpg
+Source URL:
+https://images-assets.nasa.gov/image/PIA04921/PIA04921~orig.jpg
+
+Saved as: crixa-wallpaper-jupiter.jpg
+Source URL:
+https://images-assets.nasa.gov/image/PIA07929/PIA07929~orig.jpg
+
+Saved as: crixa-wallpaper-aurora.jpg
+Source URL:
+https://images-assets.nasa.gov/image/PIA00342/PIA00342~orig.jpg
+
+Saved as: crixa-wallpaper-rings.jpg
+Source URL:
+https://images-assets.nasa.gov/image/PIA12234/PIA12234~orig.jpg
+
+Saved as: crixa-wallpaper-uranus.jpg
+Source URL:
+https://images-assets.nasa.gov/image/PIA18182/PIA18182~orig.jpg
+
+Provider:
+NASA Image and Video Library
+https://images.nasa.gov/

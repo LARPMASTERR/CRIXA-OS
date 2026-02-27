@@ -1,0 +1,33 @@
+{
+  "layer": "top",
+  "position": "bottom",
+  "height": 36,
+  "modules-left": ["custom/launcher", "wlr/taskbar"],
+  "modules-center": [],
+  "modules-right": ["network", "cpu", "memory", "clock"],
+  "custom/launcher": {
+    "format": "  CRIXA  ",
+    "on-click": "wofi --show drun --allow-images",
+    "tooltip": false
+  },
+  "wlr/taskbar": {
+    "format": "{icon}",
+    "icon-size": 16,
+    "tooltip-format": "{title}",
+    "on-click": "activate"
+  },
+  "network": {
+    "format-wifi": "wifi {signalStrength}%",
+    "format-ethernet": "lan",
+    "format-disconnected": "offline"
+  },
+  "cpu": {
+    "format": "cpu {usage}%"
+  },
+  "memory": {
+    "format": "mem {percentage}%"
+  },
+  "clock": {
+    "format": "{:%H:%M  %a %d %b}"
+  }
+}

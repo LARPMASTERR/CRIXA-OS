@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=CRIXA Launcher
+Comment=Open the CRIXA application launcher
+Exec=crixa-menu
+Icon=crixa-launcher
+Terminal=false
+Categories=System;
+StartupNotify=false
+NoDisplay=true

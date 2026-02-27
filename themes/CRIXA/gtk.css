@@ -1,0 +1,63 @@
+@define-color crixa_bg #e5e7eb;
+@define-color crixa_surface #f3f4f6;
+@define-color crixa_accent #2f80ed;
+@define-color crixa_navy #0f172a;
+@define-color crixa_text #0f172a;
+@define-color crixa_border #9ca3af;
+
+* {
+  border-radius: 6px;
+  font-family: "DejaVu Sans";
+}
+
+window,
+.background {
+  background-color: @crixa_bg;
+  color: @crixa_text;
+}
+
+headerbar {
+  background-color: @crixa_navy;
+  border-bottom: 1px solid #1e293b;
+  color: #f8fafc;
+  box-shadow: none;
+}
+
+headerbar label,
+headerbar title,
+headerbar .title,
+.titlebar label {
+  color: #f8fafc;
+}
+
+button {
+  background-color: @crixa_surface;
+  border: 1px solid @crixa_border;
+  color: @crixa_text;
+  box-shadow: none;
+}
+
+button:hover,
+button:focus {
+  border-color: @crixa_accent;
+}
+
+button.suggested-action {
+  background-color: @crixa_accent;
+  border-color: @crixa_accent;
+  color: #ffffff;
+}
+
+entry,
+textview,
+spinbutton {
+  background-color: #ffffff;
+  border: 1px solid @crixa_border;
+  color: @crixa_text;
+}
+
+menu,
+popover {
+  background-color: #ffffff;
+  border: 1px solid @crixa_border;
+}

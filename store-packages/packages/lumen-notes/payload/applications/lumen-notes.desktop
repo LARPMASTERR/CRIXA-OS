@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Lumen Notes
+Comment=Full-featured CRIXA notes workspace
+Exec=lumen-notes
+Icon=lumen-notes
+Terminal=false
+Categories=Office;Utility;
+StartupNotify=true

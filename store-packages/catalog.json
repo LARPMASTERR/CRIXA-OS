@@ -1,0 +1,52 @@
+{
+  "apps": [
+    {
+      "id": "lumen-notes",
+      "name": "Lumen Notes",
+      "version": "1.0.0",
+      "category": "Productivity",
+      "size": "~85 KB",
+      "summary": "A full personal notes workspace with search, tags, import, and export.",
+      "description": "Lumen Notes is a full desktop notes app with persistent local storage, quick searching across titles and content, tag editing, auto-save, and file import/export workflows.",
+      "entrypoint": "lumen-notes",
+      "features": [
+        "Create, duplicate, and delete notes",
+        "Tag system and instant full-text filtering",
+        "Autosave editor with word and character counters",
+        "Import text files and export selected notes"
+      ]
+    },
+    {
+      "id": "orbit-tasks",
+      "name": "Orbit Tasks",
+      "version": "1.0.0",
+      "category": "Workflow",
+      "size": "~92 KB",
+      "summary": "A kanban-style planner with priorities, due dates, and board movement.",
+      "description": "Orbit Tasks provides a three-column workflow board (To Do, In Progress, Done), detailed task editor, priority and due date fields, and saved board state for ongoing project tracking.",
+      "entrypoint": "orbit-tasks",
+      "features": [
+        "Kanban board with To Do / In Progress / Done lanes",
+        "Priority and due date fields",
+        "Quick move left/right between workflow stages",
+        "Search across task title and details"
+      ]
+    },
+    {
+      "id": "media-lab",
+      "name": "Media Lab",
+      "version": "1.0.0",
+      "category": "Media",
+      "size": "~96 KB",
+      "summary": "A full ffmpeg conversion studio for video, audio, and GIF output.",
+      "description": "Media Lab wraps ffmpeg in a GUI with presets, optional clip trimming, live conversion log output, conversion progress tracking, and quick access to output folders.",
+      "entrypoint": "media-lab",
+      "features": [
+        "Presets for MP4, WebM, MP3, and GIF",
+        "Optional start time and duration clipping",
+        "Live log and progress indicator",
+        "Stop conversion and open output folder controls"
+      ]
+    }
+  ]
+}

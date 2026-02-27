@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=CRIXA Task Manager
+Comment=Live system monitor and process viewer
+Exec=crixa-task-manager
+Icon=crixa-task-manager
+Terminal=false
+Categories=System;Monitor;
+StartupNotify=false

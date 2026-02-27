@@ -1,0 +1,5 @@
+export XDG_CURRENT_DESKTOP=CRIXA-Wayland
+export XDG_SESSION_DESKTOP=crixa-wayland
+export XDG_SESSION_TYPE=wayland
+export MOZ_ENABLE_WAYLAND=1
+export QT_QPA_PLATFORM=wayland

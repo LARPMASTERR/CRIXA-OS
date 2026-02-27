@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=X-GNOME-Metatheme
+Name=CRIXA
+Comment=CRIXA OS visual theme
+
+[X-GNOME-Metatheme]
+GtkTheme=CRIXA
+MetacityTheme=CRIXA
+IconTheme=hicolor
+CursorTheme=Adwaita
+ButtonLayout=menu:minimize,maximize,close

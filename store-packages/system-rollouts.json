@@ -1,0 +1,45 @@
+{
+  "product": "CRIXA OS",
+  "schema": 1,
+  "tracks": {
+    "stable": {
+      "release_version": "0.0.0",
+      "min_current_version": "0.0.0",
+      "rollout_percent": 100,
+      "deadline_utc": null,
+      "notes": "Default stable channel seed. Future production rollouts should start below 100% and ramp gradually.",
+      "payload": {
+        "type": "iso",
+        "filename": "CRIXA_OS_v0.iso",
+        "url": "",
+        "sha256": ""
+      }
+    },
+    "beta": {
+      "release_version": "0.0.0",
+      "min_current_version": "0.0.0",
+      "rollout_percent": 100,
+      "deadline_utc": null,
+      "notes": "Early-access channel for testing candidate releases before stable.",
+      "payload": {
+        "type": "iso",
+        "filename": "CRIXA_OS_v0.iso",
+        "url": "",
+        "sha256": ""
+      }
+    },
+    "canary": {
+      "release_version": "0.0.0",
+      "min_current_version": "0.0.0",
+      "rollout_percent": 100,
+      "deadline_utc": null,
+      "notes": "Fastest channel for smoke-testing rollout logic.",
+      "payload": {
+        "type": "iso",
+        "filename": "CRIXA_OS_v0.iso",
+        "url": "",
+        "sha256": ""
+      }
+    }
+  }
+}

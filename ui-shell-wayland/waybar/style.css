@@ -1,0 +1,42 @@
+* {
+  border: none;
+  border-radius: 0;
+  font-family: DejaVu Sans;
+  font-size: 13px;
+  min-height: 0;
+}
+
+window#waybar {
+  background: rgba(6, 20, 44, 0.92);
+  color: #dbeafe;
+}
+
+#custom-launcher {
+  margin: 5px 8px;
+  padding: 4px 12px;
+  border-radius: 8px;
+  background: rgba(38, 110, 200, 0.22);
+  color: #dbeafe;
+}
+
+#taskbar {
+  margin: 4px 6px;
+}
+
+#taskbar button {
+  margin: 2px 4px;
+  padding: 2px 8px;
+  border-radius: 7px;
+  background: rgba(12, 35, 68, 0.65);
+  color: #dbeafe;
+}
+
+#network,
+#cpu,
+#memory,
+#clock {
+  margin: 5px 6px;
+  padding: 3px 10px;
+  border-radius: 7px;
+  background: rgba(12, 35, 68, 0.65);
+}

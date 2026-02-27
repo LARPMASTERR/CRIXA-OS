@@ -1,0 +1,229 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<openbox_config xmlns="http://openbox.org/3.4/rc">
+  <resistance>
+    <strength>10</strength>
+    <screen_edge_strength>20</screen_edge_strength>
+  </resistance>
+
+  <focus>
+    <focusNew>yes</focusNew>
+    <followMouse>no</followMouse>
+    <focusLast>yes</focusLast>
+    <underMouse>no</underMouse>
+    <focusDelay>0</focusDelay>
+    <raiseOnFocus>no</raiseOnFocus>
+  </focus>
+
+  <placement>
+    <policy>Smart</policy>
+    <center>yes</center>
+    <monitor>Primary</monitor>
+    <primaryMonitor>1</primaryMonitor>
+  </placement>
+
+  <theme>
+    <name>CRIXA</name>
+    <titleLayout>NLIMC</titleLayout>
+    <keepBorder>yes</keepBorder>
+    <animateIconify>no</animateIconify>
+    <font place="ActiveWindow">
+      <name>DejaVu Sans</name>
+      <size>10</size>
+      <weight>Bold</weight>
+      <slant>Normal</slant>
+    </font>
+    <font place="InactiveWindow">
+      <name>DejaVu Sans</name>
+      <size>10</size>
+      <weight>Normal</weight>
+      <slant>Normal</slant>
+    </font>
+    <font place="MenuHeader">
+      <name>DejaVu Sans</name>
+      <size>10</size>
+      <weight>Bold</weight>
+      <slant>Normal</slant>
+    </font>
+    <font place="MenuItem">
+      <name>DejaVu Sans</name>
+      <size>10</size>
+      <weight>Normal</weight>
+      <slant>Normal</slant>
+    </font>
+    <font place="OnScreenDisplay">
+      <name>DejaVu Sans</name>
+      <size>10</size>
+      <weight>Normal</weight>
+      <slant>Normal</slant>
+    </font>
+  </theme>
+
+  <desktops>
+    <number>1</number>
+    <firstdesk>1</firstdesk>
+    <names>
+      <name>main</name>
+    </names>
+  </desktops>
+
+  <keyboard>
+    <chainQuitKey>C-g</chainQuitKey>
+
+    <keybind key="C-A-Return">
+      <action name="Execute">
+        <command>crixa-terminal</command>
+      </action>
+    </keybind>
+
+    <keybind key="C-A-space">
+      <action name="Execute">
+        <command>rofi -show drun -show-icons</command>
+      </action>
+    </keybind>
+
+    <keybind key="C-A-e">
+      <action name="Execute">
+        <command>crixa-files</command>
+      </action>
+    </keybind>
+
+    <keybind key="A-F1">
+      <action name="Execute">
+        <command>rofi -show drun -show-icons</command>
+      </action>
+    </keybind>
+
+    <keybind key="A-space">
+      <action name="ShowMenu">
+        <menu>client-menu</menu>
+      </action>
+    </keybind>
+
+    <keybind key="W-Return">
+      <action name="Execute">
+        <command>crixa-terminal</command>
+      </action>
+    </keybind>
+
+    <keybind key="W-space">
+      <action name="Execute">
+        <command>rofi -show drun -show-icons</command>
+      </action>
+    </keybind>
+
+    <keybind key="W-e">
+      <action name="Execute">
+        <command>crixa-files</command>
+      </action>
+    </keybind>
+
+    <keybind key="Print">
+      <action name="Execute">
+        <command>crixa-screenshot</command>
+      </action>
+    </keybind>
+
+    <keybind key="S-Print">
+      <action name="Execute">
+        <command>crixa-screenshot select</command>
+      </action>
+    </keybind>
+
+    <keybind key="W-Up">
+      <action name="ToggleMaximizeFull"/>
+    </keybind>
+
+    <keybind key="W-Down">
+      <action name="Iconify"/>
+    </keybind>
+
+    <keybind key="F11">
+      <action name="ToggleFullscreen"/>
+    </keybind>
+
+    <keybind key="A-F4">
+      <action name="Close"/>
+    </keybind>
+  </keyboard>
+
+  <mouse>
+    <dragThreshold>1</dragThreshold>
+    <doubleClickTime>500</doubleClickTime>
+    <screenEdgeWarpTime>0</screenEdgeWarpTime>
+    <screenEdgeWarpMouse>false</screenEdgeWarpMouse>
+
+    <context name="Root">
+      <mousebind button="Right" action="Press">
+        <action name="ShowMenu">
+          <menu>root-menu</menu>
+        </action>
+      </mousebind>
+    </context>
+
+    <context name="Titlebar">
+      <mousebind button="Left" action="Press">
+        <action name="Focus"/>
+        <action name="Raise"/>
+        <action name="Unshade"/>
+        <action name="Move"/>
+      </mousebind>
+      <mousebind button="Left" action="DoubleClick">
+        <action name="ToggleMaximizeFull"/>
+      </mousebind>
+      <mousebind button="Right" action="Click">
+        <action name="ShowMenu">
+          <menu>client-menu</menu>
+        </action>
+      </mousebind>
+    </context>
+
+    <context name="Frame">
+      <mousebind button="A-Left" action="Press">
+        <action name="Focus"/>
+        <action name="Raise"/>
+        <action name="Move"/>
+      </mousebind>
+      <mousebind button="A-Right" action="Press">
+        <action name="Focus"/>
+        <action name="Raise"/>
+        <action name="Resize"/>
+      </mousebind>
+    </context>
+
+    <context name="Maximize">
+      <mousebind button="Left" action="Click">
+        <action name="ToggleMaximizeFull"/>
+      </mousebind>
+    </context>
+
+    <context name="Iconify">
+      <mousebind button="Left" action="Click">
+        <action name="Iconify"/>
+      </mousebind>
+    </context>
+
+    <context name="Close">
+      <mousebind button="Left" action="Click">
+        <action name="Close"/>
+      </mousebind>
+    </context>
+  </mouse>
+
+  <menu>
+    <file>menu.xml</file>
+    <hideDelay>0</hideDelay>
+    <middle>no</middle>
+    <submenuShowDelay>40</submenuShowDelay>
+    <submenuHideDelay>120</submenuHideDelay>
+    <applicationIcons>yes</applicationIcons>
+  </menu>
+
+  <margins>
+    <top>0</top>
+    <bottom>44</bottom>
+    <left>0</left>
+    <right>0</right>
+  </margins>
+
+  <applications/>
+</openbox_config>

@@ -1,0 +1,20 @@
+# --- CRIXA FETCH ---
+if command -v crixa-fetch >/dev/null 2>&1; then
+  alias crixafetch='crixa-fetch'
+fi
+
+if command -v neofetch >/dev/null 2>&1; then
+  alias fetch='neofetch'
+elif command -v crixa-fetch >/dev/null 2>&1; then
+  alias fetch='crixa-fetch'
+fi
+
+if [ -z "${CRIXA_FETCH_DISABLED:-}" ] && [ -z "${CRIXA_FETCH_SHOWN:-}" ]; then
+  export CRIXA_FETCH_SHOWN=1
+  if command -v neofetch >/dev/null 2>&1; then
+    neofetch
+  elif command -v crixa-fetch >/dev/null 2>&1; then
+    crixa-fetch
+  fi
+fi
+# --- END CRIXA FETCH ---

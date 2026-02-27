@@ -1,0 +1,25 @@
+# Build artifacts and generated OS payloads
+/rootfs/
+/iso/*
+!/iso/.gitkeep
+/logs/*
+!/logs/.gitkeep
+/build/work/
+/crixa-repo/
+
+# Local signing material and secrets
+/build/keys/
+/.secrets/
+
+# Local scratch/debug files
+/out.txt
+/err.txt
+/5
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# OS/editor noise
+.DS_Store
+Thumbs.db

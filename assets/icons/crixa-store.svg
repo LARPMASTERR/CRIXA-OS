@@ -1,0 +1,7 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="crixa-store">
+  <rect width="256" height="256" rx="52" fill="#0b1a30"/>
+  <rect x="18" y="18" width="220" height="220" rx="42" fill="#12325b"/>
+  <rect x="18" y="18" width="220" height="46" rx="18" fill="#184777" opacity="0.9"/>
+  <path d="M38 42H218" stroke="#58a6ff" stroke-width="4" stroke-linecap="round" opacity="0.65"/>
+  <path d="M74 108h108l-8 72H82z" fill="#dbeafe"/><path d="M88 108a40 40 0 0 1 80 0" fill="none" stroke="#9cc8ff" stroke-width="12" stroke-linecap="round"/><rect x="102" y="132" width="52" height="10" rx="5" fill="#12325b"/>
+</svg>

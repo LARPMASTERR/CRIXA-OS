@@ -1,0 +1,31 @@
+window {
+  margin: 0px;
+  border: 1px solid #1f4e91;
+  border-radius: 14px;
+  background-color: rgba(8, 19, 38, 0.95);
+  font-family: DejaVu Sans;
+  font-size: 14px;
+}
+
+#input {
+  margin: 10px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid #245caa;
+  color: #dbeafe;
+  background-color: rgba(12, 35, 68, 0.9);
+}
+
+#inner-box {
+  margin: 6px 10px 10px 10px;
+}
+
+#entry {
+  padding: 9px 10px;
+  border-radius: 9px;
+  color: #dbeafe;
+}
+
+#entry:selected {
+  background-color: rgba(47, 128, 237, 0.35);
+}

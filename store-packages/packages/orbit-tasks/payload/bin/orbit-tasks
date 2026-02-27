@@ -1,0 +1,302 @@
+#!/usr/bin/env python3
+import json
+import uuid
+from datetime import datetime
+from pathlib import Path
+import tkinter as tk
+from tkinter import messagebox, ttk
+
+DATA_DIR = Path.home() / ".local" / "share" / "orbit-tasks"
+DATA_FILE = DATA_DIR / "tasks.json"
+STATUS_ORDER = ["todo", "doing", "done"]
+STATUS_LABEL = {"todo": "To Do", "doing": "In Progress", "done": "Done"}
+
+
+def now_iso() -> str:
+    return datetime.utcnow().isoformat(timespec="seconds") + "Z"
+
+
+class OrbitTasks(tk.Tk):
+    def __init__(self) -> None:
+        super().__init__()
+        self.title("Orbit Tasks")
+        self.geometry("1220x760")
+        self.minsize(980, 620)
+        self.configure(bg="#0a162c")
+
+        self.tasks: list[dict] = []
+        self.selected_id: str | None = None
+
+        self.search_var = tk.StringVar()
+        self.search_var.trace_add("write", lambda *_: self.refresh_board())
+        self.status_var = tk.StringVar(value="Ready")
+
+        self.setup_style()
+        self.build_ui()
+        self.load_tasks()
+        self.refresh_board()
+
+    def setup_style(self) -> None:
+        self.style = ttk.Style(self)
+        try:
+            self.style.theme_use("clam")
+        except tk.TclError:
+            pass
+        self.style.configure(".", background="#0a162c", foreground="#dbeafe", font=("DejaVu Sans", 10))
+        self.style.configure("Header.TLabel", font=("DejaVu Sans", 15, "bold"))
+        self.style.configure("Muted.TLabel", foreground="#8ea6cb")
+        self.style.configure("TButton", padding=(10, 6))
+
+    def build_ui(self) -> None:
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(1, weight=1)
+
+        top = ttk.Frame(self)
+        top.grid(row=0, column=0, sticky="ew", padx=12, pady=(12, 8))
+        top.grid_columnconfigure(2, weight=1)
+
+        ttk.Label(top, text="Orbit Tasks", style="Header.TLabel").grid(row=0, column=0, sticky="w", padx=(8, 10))
+        ttk.Button(top, text="New Task", command=self.new_task).grid(row=0, column=1, padx=4)
+        ttk.Entry(top, textvariable=self.search_var).grid(row=0, column=2, sticky="ew", padx=8)
+        ttk.Button(top, text="Save", command=self.save_selected).grid(row=0, column=3, padx=4)
+        ttk.Button(top, text="Delete", command=self.delete_selected).grid(row=0, column=4, padx=(4, 8))
+
+        body = ttk.Frame(self)
+        body.grid(row=1, column=0, sticky="nsew", padx=12, pady=8)
+        body.grid_columnconfigure(0, weight=2)
+        body.grid_columnconfigure(1, weight=1)
+        body.grid_rowconfigure(0, weight=1)
+
+        board = ttk.Frame(body)
+        board.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+        for col in range(3):
+            board.grid_columnconfigure(col, weight=1)
+        board.grid_rowconfigure(1, weight=1)
+
+        self.count_vars: dict[str, tk.StringVar] = {}
+        self.listboxes: dict[str, tk.Listbox] = {}
+
+        for col, status in enumerate(STATUS_ORDER):
+            frame = ttk.Frame(board)
+            frame.grid(row=0, column=col, rowspan=2, sticky="nsew", padx=4)
+            frame.grid_rowconfigure(1, weight=1)
+
+            count_var = tk.StringVar(value="0")
+            self.count_vars[status] = count_var
+            ttk.Label(frame, text=STATUS_LABEL[status], style="Muted.TLabel").grid(row=0, column=0, sticky="w", padx=6, pady=(6, 0))
+            ttk.Label(frame, textvariable=count_var, style="Muted.TLabel").grid(row=0, column=1, sticky="e", padx=6, pady=(6, 0))
+
+            listbox = tk.Listbox(
+                frame,
+                bg="#10223f",
+                fg="#dbeafe",
+                selectbackground="#2f80ed",
+                selectforeground="#ffffff",
+                relief="flat",
+                highlightthickness=0,
+                activestyle="none",
+                font=("DejaVu Sans", 10),
+            )
+            listbox.grid(row=1, column=0, columnspan=2, sticky="nsew", padx=6, pady=(4, 6))
+            listbox.bind("<<ListboxSelect>>", lambda _e, s=status: self.on_select_from(s))
+            self.listboxes[status] = listbox
+
+        editor = ttk.Frame(body)
+        editor.grid(row=0, column=1, sticky="nsew")
+        editor.grid_columnconfigure(1, weight=1)
+        editor.grid_rowconfigure(3, weight=1)
+
+        ttk.Label(editor, text="Task Details", style="Header.TLabel").grid(row=0, column=0, columnspan=2, sticky="w", padx=8, pady=(6, 12))
+
+        ttk.Label(editor, text="Title", style="Muted.TLabel").grid(row=1, column=0, sticky="w", padx=8, pady=4)
+        self.title_entry = ttk.Entry(editor)
+        self.title_entry.grid(row=1, column=1, sticky="ew", padx=8, pady=4)
+
+        ttk.Label(editor, text="Priority", style="Muted.TLabel").grid(row=2, column=0, sticky="w", padx=8, pady=4)
+        self.priority_combo = ttk.Combobox(editor, values=["Low", "Normal", "High", "Critical"], state="readonly")
+        self.priority_combo.set("Normal")
+        self.priority_combo.grid(row=2, column=1, sticky="ew", padx=8, pady=4)
+
+        ttk.Label(editor, text="Due Date", style="Muted.TLabel").grid(row=3, column=0, sticky="nw", padx=8, pady=4)
+        self.due_entry = ttk.Entry(editor)
+        self.due_entry.grid(row=3, column=1, sticky="new", padx=8, pady=4)
+
+        ttk.Label(editor, text="Details", style="Muted.TLabel").grid(row=4, column=0, sticky="nw", padx=8, pady=4)
+        self.details_text = tk.Text(
+            editor,
+            wrap="word",
+            bg="#0f1f38",
+            fg="#dbeafe",
+            insertbackground="#dbeafe",
+            relief="flat",
+            highlightthickness=0,
+            height=14,
+            padx=8,
+            pady=8,
+            font=("DejaVu Sans", 10),
+        )
+        self.details_text.grid(row=4, column=1, sticky="nsew", padx=8, pady=4)
+
+        move_row = ttk.Frame(editor)
+        move_row.grid(row=5, column=0, columnspan=2, sticky="ew", padx=8, pady=(8, 6))
+        ttk.Button(move_row, text="Move Left", command=lambda: self.move_selected(-1)).pack(side="left", padx=(0, 8))
+        ttk.Button(move_row, text="Move Right", command=lambda: self.move_selected(1)).pack(side="left")
+
+        status = ttk.Label(self, textvariable=self.status_var, style="Muted.TLabel")
+        status.grid(row=2, column=0, sticky="ew", padx=16, pady=(2, 10))
+
+    def load_tasks(self) -> None:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        if DATA_FILE.exists():
+            try:
+                data = json.loads(DATA_FILE.read_text(encoding="utf-8"))
+                self.tasks = data.get("tasks", [])
+            except Exception:
+                self.tasks = []
+        self.tasks = [task for task in self.tasks if isinstance(task, dict) and task.get("id")]
+        self.tasks.sort(key=lambda t: t.get("updated_at", ""), reverse=True)
+
+    def save_all(self) -> None:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        DATA_FILE.write_text(json.dumps({"tasks": self.tasks}, indent=2), encoding="utf-8")
+
+    def filtered_tasks(self, status: str) -> list[dict]:
+        query = self.search_var.get().strip().lower()
+        out = []
+        for task in self.tasks:
+            if task.get("status", "todo") != status:
+                continue
+            text = f"{task.get('title', '')} {task.get('details', '')}".lower()
+            if query and query not in text:
+                continue
+            out.append(task)
+        out.sort(key=lambda t: t.get("updated_at", ""), reverse=True)
+        return out
+
+    def refresh_board(self) -> None:
+        selected_id = self.selected_id
+        for status in STATUS_ORDER:
+            items = self.filtered_tasks(status)
+            self.count_vars[status].set(str(len(items)))
+            listbox = self.listboxes[status]
+            listbox.delete(0, tk.END)
+            idx = None
+            for i, task in enumerate(items):
+                pri = task.get("priority", "Normal")
+                due = task.get("due", "").strip()
+                due_txt = f" | {due}" if due else ""
+                listbox.insert(tk.END, f"[{pri}] {task.get('title', 'Untitled')}{due_txt}")
+                if selected_id and task.get("id") == selected_id:
+                    idx = i
+            if idx is not None:
+                listbox.selection_set(idx)
+        if selected_id:
+            self.load_selected_into_editor(selected_id)
+
+    def get_task_by_id(self, task_id: str | None) -> dict | None:
+        if not task_id:
+            return None
+        for task in self.tasks:
+            if task.get("id") == task_id:
+                return task
+        return None
+
+    def on_select_from(self, status: str) -> None:
+        listbox = self.listboxes[status]
+        if not listbox.curselection():
+            return
+        idx = listbox.curselection()[0]
+        items = self.filtered_tasks(status)
+        if idx < 0 or idx >= len(items):
+            return
+        self.selected_id = items[idx].get("id")
+        self.load_selected_into_editor(self.selected_id)
+
+        for other_status, other in self.listboxes.items():
+            if other_status != status:
+                other.selection_clear(0, tk.END)
+
+    def load_selected_into_editor(self, task_id: str | None) -> None:
+        task = self.get_task_by_id(task_id)
+        if not task:
+            return
+        self.title_entry.delete(0, tk.END)
+        self.title_entry.insert(0, task.get("title", ""))
+        self.priority_combo.set(task.get("priority", "Normal"))
+        self.due_entry.delete(0, tk.END)
+        self.due_entry.insert(0, task.get("due", ""))
+        self.details_text.delete("1.0", tk.END)
+        self.details_text.insert("1.0", task.get("details", ""))
+        self.status_var.set(f"Selected: {task.get('title', 'Untitled')}")
+
+    def new_task(self) -> None:
+        task = {
+            "id": uuid.uuid4().hex,
+            "title": "New Task",
+            "details": "",
+            "priority": "Normal",
+            "due": "",
+            "status": "todo",
+            "created_at": now_iso(),
+            "updated_at": now_iso(),
+        }
+        self.tasks.append(task)
+        self.selected_id = task["id"]
+        self.save_all()
+        self.refresh_board()
+        self.load_selected_into_editor(task["id"])
+        self.status_var.set("New task created")
+
+    def save_selected(self) -> None:
+        task = self.get_task_by_id(self.selected_id)
+        if not task:
+            messagebox.showinfo("Save", "Select a task first.")
+            return
+        task["title"] = self.title_entry.get().strip() or "Untitled Task"
+        task["priority"] = self.priority_combo.get().strip() or "Normal"
+        task["due"] = self.due_entry.get().strip()
+        task["details"] = self.details_text.get("1.0", tk.END).rstrip("\n")
+        task["updated_at"] = now_iso()
+        self.save_all()
+        self.refresh_board()
+        self.status_var.set(f"Saved: {task['title']}")
+
+    def delete_selected(self) -> None:
+        task = self.get_task_by_id(self.selected_id)
+        if not task:
+            return
+        if not messagebox.askyesno("Delete Task", f"Delete '{task.get('title', 'Untitled Task')}'?"):
+            return
+        self.tasks = [item for item in self.tasks if item.get("id") != task.get("id")]
+        self.selected_id = None
+        self.save_all()
+        self.refresh_board()
+        self.title_entry.delete(0, tk.END)
+        self.due_entry.delete(0, tk.END)
+        self.details_text.delete("1.0", tk.END)
+        self.status_var.set("Task deleted")
+
+    def move_selected(self, delta: int) -> None:
+        task = self.get_task_by_id(self.selected_id)
+        if not task:
+            return
+        current = task.get("status", "todo")
+        idx = STATUS_ORDER.index(current)
+        next_idx = min(max(0, idx + delta), len(STATUS_ORDER) - 1)
+        if next_idx == idx:
+            return
+        task["status"] = STATUS_ORDER[next_idx]
+        task["updated_at"] = now_iso()
+        self.save_all()
+        self.refresh_board()
+        self.status_var.set(f"Moved to {STATUS_LABEL[task['status']]}")
+
+
+def main() -> int:
+    app = OrbitTasks()
+    app.mainloop()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

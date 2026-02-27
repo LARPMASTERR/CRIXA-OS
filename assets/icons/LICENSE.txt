@@ -1,0 +1,9 @@
+﻿CRIXA icon set
+==============
+
+All SVG files in this directory were created specifically for CRIXA OS by the CRIXA contributors.
+
+License: CC0-1.0 (Public Domain Dedication)
+https://creativecommons.org/publicdomain/zero/1.0/
+
+You may copy, modify, redistribute, and use these icons for any purpose without attribution.

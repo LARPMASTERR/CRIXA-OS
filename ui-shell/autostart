@@ -1,0 +1,78 @@
+#!/bin/sh
+
+xsetroot -cursor_name left_ptr
+xset s off
+xset -dpms
+xset s noblank
+
+# Pick the sharpest mode available to avoid blurry host scaling in QEMU.
+(
+  sleep 0.6
+  if command -v xrandr >/dev/null 2>&1; then
+    MODES="3440x1440 2560x1440 2560x1080 1920x1200 1920x1080 1680x1050 1600x900 1366x768"
+    # On virtualized sessions, prefer a slightly lower mode first for smoother frame pacing.
+    if command -v systemd-detect-virt >/dev/null 2>&1 && systemd-detect-virt -q; then
+      MODES="1600x900 1366x768 1920x1080 1920x1200 2560x1080 3440x1440 2560x1440 1680x1050"
+    fi
+    OUT="$(xrandr --query | awk '/ connected primary/{print $1; exit} / connected/{print $1; exit}')"
+    if [ -n "$OUT" ]; then
+      APPLIED=0
+      for MODE in $MODES; do
+        if xrandr --query | awk -v out="$OUT" -v mode="$MODE" '
+          $1 == out { in_block = 1; next }
+          in_block && $1 == mode { found = 1; exit }
+          in_block && $1 !~ /^[0-9]+x[0-9]+$/ && $1 !~ /^[[:space:]]/ { exit }
+          END { exit found ? 0 : 1 }
+        '; then
+          xrandr --output "$OUT" --mode "$MODE" --scale 1x1 >/dev/null 2>&1 || true
+          APPLIED=1
+          break
+        fi
+      done
+      if [ "$APPLIED" -eq 0 ]; then
+        BEST="$(xrandr --query | awk -v out="$OUT" '
+          $1 == out { in_block = 1; next }
+          in_block && $1 ~ /^[0-9]+x[0-9]+$/ {
+            split($1, p, "x")
+            px = p[1] * p[2]
+            if (px > best_px) { best_px = px; best = $1 }
+            next
+          }
+          in_block && $1 !~ /^[0-9]+x[0-9]+$/ && $1 !~ /^[[:space:]]/ { exit }
+          END { print best }
+        ')"
+        [ -n "$BEST" ] && xrandr --output "$OUT" --mode "$BEST" --scale 1x1 >/dev/null 2>&1 || true
+      fi
+      xrandr --dpi 96 >/dev/null 2>&1 || true
+    fi
+  fi
+) &
+
+if command -v thunar >/dev/null 2>&1; then
+  (sleep 1.2; thunar --daemon >/dev/null 2>&1 || true) &
+fi
+
+(
+  crixa-wallpaper apply-current >/dev/null 2>&1 \
+    || feh --no-fehbg --bg-fill /usr/share/backgrounds/crixa-wallpaper.jpg \
+    || feh --no-fehbg --bg-fill /usr/share/backgrounds/crixa-wallpaper.svg
+) &
+
+if command -v picom >/dev/null 2>&1; then
+  # Avoid extra latency in VM sessions; keep compositor for non-virtualized hosts.
+  if command -v systemd-detect-virt >/dev/null 2>&1 && systemd-detect-virt -q; then
+    :
+  else
+    picom --config "$HOME/.config/picom/picom.conf" --experimental-backends &
+  fi
+fi
+
+if command -v nm-applet >/dev/null 2>&1; then
+  (sleep 4; nm-applet --sm-disable) &
+fi
+
+if command -v blueman-applet >/dev/null 2>&1; then
+  (sleep 5; blueman-applet >/dev/null 2>&1) &
+fi
+
+(sleep 1; tint2) &

@@ -1,0 +1,17 @@
+[Configuration]
+LastShowHidden=FALSE
+MiscDateStyle=THUNAR_DATE_STYLE_SHORT
+MiscExecuteShellScriptsByDefault=FALSE
+MiscFileSizeBinary=TRUE
+MiscFoldersFirst=TRUE
+MiscMiddleClickInTab=TRUE
+MiscRecursiveSearch=THUNAR_RECURSIVE_SEARCH_LOCAL
+MiscRememberGeometry=TRUE
+MiscShowDeleteAction=TRUE
+MiscSingleClick=FALSE
+MiscTabCloseMiddleClick=TRUE
+MiscThumbnailDrawFrames=FALSE
+MiscThumbnailMode=THUNAR_THUMBNAIL_MODE_NEVER
+MiscVolumeManagement=TRUE
+ShortcutsIconEmblems=FALSE
+TreeIconEmblems=FALSE

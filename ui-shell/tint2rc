@@ -1,0 +1,156 @@
+# CRIXA taskbar: launcher left, tasks centered, tray/clock right.
+
+# Backgrounds
+rounded = 0
+border_width = 0
+border_sides = TBLR
+background_color = #0f172a 100
+border_color = #0f172a 100
+background_color_hover = #0f172a 100
+border_color_hover = #0f172a 100
+background_color_pressed = #0f172a 100
+border_color_pressed = #0f172a 100
+
+rounded = 0
+border_width = 1
+border_sides = TBLR
+background_color = #101928 90
+border_color = #20314f 90
+background_color_hover = #17253e 96
+border_color_hover = #2b4369 100
+background_color_pressed = #1a2d4e 100
+border_color_pressed = #3a5f97 100
+
+rounded = 10
+border_width = 1
+border_sides = TBLR
+background_color = #0d1a2f 96
+border_color = #1f3d66 90
+background_color_hover = #112443 100
+border_color_hover = #3d6ca8 100
+background_color_pressed = #132b51 100
+border_color_pressed = #5b8ecf 100
+
+rounded = 6
+border_width = 1
+border_sides = TBLR
+background_color = #1a2b45 76
+border_color = #2f4f7b 85
+background_color_hover = #223a5f 92
+border_color_hover = #4d79b5 100
+background_color_pressed = #2a4b7e 100
+border_color_pressed = #7ba4d8 100
+
+rounded = 6
+border_width = 1
+border_sides = TBLR
+background_color = #2f80ed 92
+border_color = #78b2fa 100
+background_color_hover = #3d8bf1 100
+border_color_hover = #8bc0ff 100
+background_color_pressed = #236fd4 100
+border_color_pressed = #9acaFF 100
+
+rounded = 6
+border_width = 1
+border_sides = TBLR
+background_color = #be123c 90
+border_color = #fb7185 100
+background_color_hover = #be123c 96
+border_color_hover = #fb7185 100
+background_color_pressed = #be123c 100
+border_color_pressed = #fb7185 100
+
+# Panel
+panel_monitor = all
+panel_position = bottom center horizontal
+panel_size = 100% 44
+panel_margin = 0 0
+panel_padding = 10 5 10
+panel_background_id = 1
+wm_menu = 0
+panel_dock = 0
+panel_pivot_struts = 0
+panel_layer = top
+panel_strut_policy = follow_size
+panel_items = LTSC
+panel_window_name = CRIXAPanel
+panel_lowers = 0
+panel_raises = 0
+panel_shrink = 0
+autohide = 0
+strut_policy = follow_size
+
+# Global style
+font = DejaVu Sans 8
+font_shadow = 0
+mouse_effects = 0
+icon_theme = hicolor
+
+# Launcher
+launcher_padding = 8 0 8
+launcher_background_id = 2
+launcher_icon_background_id = 0
+launcher_icon_size = 24
+launcher_icon_theme = hicolor
+launcher_icon_theme_override = 1
+startup_notifications = 0
+launcher_item_app = /usr/share/applications/crixa-launcher.desktop
+launcher_item_app = /usr/share/applications/crixa-terminal.desktop
+launcher_item_app = /usr/share/applications/crixa-browser.desktop
+launcher_item_app = /usr/share/applications/crixa-files.desktop
+launcher_item_app = /usr/share/applications/crixa-wallpapers.desktop
+launcher_item_app = /usr/share/applications/crixa-settings.desktop
+launcher_item_app = /usr/share/applications/crixa-task-manager.desktop
+
+# Taskbar
+taskbar_mode = single_desktop
+taskbar_padding = 0 0 8
+taskbar_background_id = 0
+taskbar_active_background_id = 0
+taskbar_name = 0
+taskbar_hide_inactive_tasks = 0
+taskbar_hide_different_monitor = 0
+taskbar_hide_different_desktop = 0
+taskbar_always_show_all_desktop_tasks = 1
+taskbar_distribute_size = 0
+taskbar_sort_order = none
+task_align = left
+
+# Tasks
+task_text = 1
+task_icon = 1
+task_centered = 1
+task_maximum_size = 220 34
+task_padding = 10 4 10
+task_background_id = 3
+task_active_background_id = 4
+task_urgent_background_id = 5
+task_iconified_background_id = 3
+task_font = DejaVu Sans 8
+task_font_color = #cbd5e1 100
+task_active_font_color = #ffffff 100
+task_urgent_font_color = #ffffff 100
+task_iconified_font_color = #94a3b8 100
+task_tooltip = 0
+task_thumbnail = 0
+
+# Systray
+systray_padding = 10 0 10
+systray_background_id = 0
+systray_sort = ascending
+systray_icon_size = 20
+systray_monitor = primary
+systray_name_filter =
+
+# Clock
+time1_format = %H:%M
+time2_format = %a %d %b
+time1_font = DejaVu Sans Bold 10
+time2_font = DejaVu Sans 8
+clock_font_color = #dbeafe 100
+clock_padding = 8 0
+clock_background_id = 2
+clock_tooltip = %A %d %B %Y
+clock_lclick_command =
+clock_rclick_command =

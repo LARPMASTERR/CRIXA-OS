@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=CRIXA Store
+Comment=Install optional CRIXA apps
+Exec=crixa-store
+Icon=crixa-store
+Terminal=false
+Categories=System;Utility;
+StartupNotify=true

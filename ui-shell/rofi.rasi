@@ -1,0 +1,82 @@
+* {
+  font: "DejaVu Sans 9";
+  bg-main: #f3f6fbf3;
+  bg-card: #ffffff;
+  fg-main: #111827;
+  fg-muted: #6b7280;
+  accent: #2f80ed;
+  border: #cbd5e1;
+  border-radius: 14px;
+}
+
+window {
+  location: southwest;
+  anchor: southwest;
+  x-offset: 8px;
+  y-offset: -42px;
+  width: 16%;
+  padding: 10px;
+  background-color: @bg-main;
+  border: 1px;
+  border-color: @border;
+  border-radius: @border-radius;
+}
+
+mainbox {
+  children: [inputbar, listview];
+  spacing: 8px;
+}
+
+inputbar {
+  children: [prompt, entry];
+  spacing: 8px;
+  padding: 7px;
+  border: 1px;
+  border-color: #d7e0ef;
+  border-radius: 10px;
+  background-color: @bg-card;
+}
+
+prompt {
+  text-color: @accent;
+  background-color: transparent;
+}
+
+entry {
+  text-color: @fg-main;
+  placeholder: "Click or type to search apps";
+  placeholder-color: @fg-muted;
+  background-color: transparent;
+}
+
+listview {
+  lines: 7;
+  columns: 1;
+  cycle: false;
+  dynamic: false;
+  scrollbar: false;
+  spacing: 3px;
+}
+
+element {
+  children: [element-icon, element-text];
+  spacing: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background-color: transparent;
+  text-color: @fg-main;
+}
+
+element-icon {
+  size: 14px;
+  background-color: transparent;
+}
+
+element selected.normal {
+  background-color: @accent;
+  text-color: #ffffff;
+}
+
+element-text {
+  background-color: transparent;
+}

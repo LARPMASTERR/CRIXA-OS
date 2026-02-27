@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Orbit Tasks
+Comment=Kanban workflow planner for CRIXA
+Exec=orbit-tasks
+Icon=orbit-tasks
+Terminal=false
+Categories=Office;ProjectManagement;Utility;
+StartupNotify=true

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=CRIXA Files
+Comment=Open file manager
+Exec=crixa-files
+Icon=crixa-files
+Terminal=false
+Categories=System;FileManager;
+StartupNotify=false

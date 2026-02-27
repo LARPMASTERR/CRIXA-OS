@@ -1,0 +1,8 @@
+{
+  "id": "flathub",
+  "name": "Flathub (Flatpak)",
+  "command": "/usr/lib/crixa-store/backends/backend-flatpak.py",
+  "priority": 20,
+  "supports_upgrade": true,
+  "description": "Web-scale Flatpak ecosystem via Flathub"
+}

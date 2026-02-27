@@ -1,0 +1,8 @@
+show=drun
+prompt=CRIXA
+allow_images=true
+width=38%
+lines=9
+term=foot
+hide_scroll=true
+gtk_dark=true

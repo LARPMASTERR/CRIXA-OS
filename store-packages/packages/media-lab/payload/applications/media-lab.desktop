@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Media Lab
+Comment=ffmpeg conversion studio for CRIXA
+Exec=media-lab
+Icon=media-lab
+Terminal=false
+Categories=AudioVideo;Utility;
+StartupNotify=true

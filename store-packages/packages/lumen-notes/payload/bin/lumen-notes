@@ -1,0 +1,340 @@
+#!/usr/bin/env python3
+import json
+import uuid
+from datetime import datetime
+from pathlib import Path
+import tkinter as tk
+from tkinter import filedialog, messagebox, ttk
+
+DATA_DIR = Path.home() / ".local" / "share" / "lumen-notes"
+DATA_FILE = DATA_DIR / "notes.json"
+
+
+def now_iso() -> str:
+    return datetime.utcnow().isoformat(timespec="seconds") + "Z"
+
+
+class LumenNotes(tk.Tk):
+    def __init__(self) -> None:
+        super().__init__()
+        self.title("Lumen Notes")
+        self.geometry("1100x700")
+        self.minsize(900, 560)
+        self.configure(bg="#0b1630")
+
+        self.notes: list[dict] = []
+        self.filtered: list[dict] = []
+        self.current_id: str | None = None
+        self.save_after_id: str | None = None
+
+        self.search_var = tk.StringVar()
+        self.search_var.trace_add("write", lambda *_: self.refresh_list())
+        self.status_var = tk.StringVar(value="Ready")
+        self.counter_var = tk.StringVar(value="Words: 0  |  Chars: 0")
+
+        self.setup_style()
+        self.build_ui()
+        self.load_notes()
+        self.refresh_list()
+
+    def setup_style(self) -> None:
+        self.style = ttk.Style(self)
+        try:
+            self.style.theme_use("clam")
+        except tk.TclError:
+            pass
+        self.style.configure(".", background="#0b1630", foreground="#dbeafe", font=("DejaVu Sans", 10))
+        self.style.configure("Header.TLabel", font=("DejaVu Sans", 15, "bold"))
+        self.style.configure("Muted.TLabel", foreground="#90a6cc")
+        self.style.configure("TButton", padding=(10, 6))
+
+    def build_ui(self) -> None:
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(1, weight=1)
+
+        top = ttk.Frame(self)
+        top.grid(row=0, column=0, sticky="ew", padx=12, pady=(12, 8))
+        top.grid_columnconfigure(2, weight=1)
+
+        ttk.Label(top, text="Lumen Notes", style="Header.TLabel").grid(row=0, column=0, sticky="w", padx=(8, 12))
+        ttk.Button(top, text="New", command=self.new_note).grid(row=0, column=1, padx=4)
+        ttk.Entry(top, textvariable=self.search_var).grid(row=0, column=2, sticky="ew", padx=8)
+        ttk.Button(top, text="Duplicate", command=self.duplicate_note).grid(row=0, column=3, padx=4)
+        ttk.Button(top, text="Delete", command=self.delete_note).grid(row=0, column=4, padx=4)
+        ttk.Button(top, text="Import", command=self.import_note).grid(row=0, column=5, padx=4)
+        ttk.Button(top, text="Export", command=self.export_note).grid(row=0, column=6, padx=(4, 8))
+
+        body = ttk.Frame(self)
+        body.grid(row=1, column=0, sticky="nsew", padx=12, pady=8)
+        body.grid_columnconfigure(1, weight=1)
+        body.grid_rowconfigure(0, weight=1)
+
+        left = ttk.Frame(body)
+        left.grid(row=0, column=0, sticky="nsw", padx=(0, 10))
+        left.grid_rowconfigure(1, weight=1)
+        ttk.Label(left, text="Notes", style="Muted.TLabel").grid(row=0, column=0, sticky="w", padx=6, pady=(6, 4))
+        self.note_list = tk.Listbox(
+            left,
+            width=34,
+            height=28,
+            bg="#112244",
+            fg="#e4efff",
+            selectbackground="#2f80ed",
+            selectforeground="#ffffff",
+            relief="flat",
+            highlightthickness=0,
+            activestyle="none",
+            font=("DejaVu Sans", 10),
+        )
+        self.note_list.grid(row=1, column=0, sticky="nsw", padx=6, pady=(0, 6))
+        self.note_list.bind("<<ListboxSelect>>", lambda _e: self.on_select())
+
+        right = ttk.Frame(body)
+        right.grid(row=0, column=1, sticky="nsew")
+        right.grid_columnconfigure(0, weight=1)
+        right.grid_rowconfigure(2, weight=1)
+
+        form = ttk.Frame(right)
+        form.grid(row=0, column=0, sticky="ew", padx=6, pady=(6, 4))
+        form.grid_columnconfigure(1, weight=1)
+        ttk.Label(form, text="Title", style="Muted.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 6))
+        self.title_entry = ttk.Entry(form)
+        self.title_entry.grid(row=0, column=1, sticky="ew", pady=2)
+        self.title_entry.bind("<KeyRelease>", lambda _e: self.schedule_save())
+
+        ttk.Label(form, text="Tags", style="Muted.TLabel").grid(row=1, column=0, sticky="w", padx=(0, 6))
+        self.tags_entry = ttk.Entry(form)
+        self.tags_entry.grid(row=1, column=1, sticky="ew", pady=2)
+        self.tags_entry.bind("<KeyRelease>", lambda _e: self.schedule_save())
+
+        ttk.Label(right, text="Content", style="Muted.TLabel").grid(row=1, column=0, sticky="w", padx=6, pady=(4, 2))
+        self.editor = tk.Text(
+            right,
+            wrap="word",
+            bg="#0f203d",
+            fg="#dbeafe",
+            insertbackground="#dbeafe",
+            relief="flat",
+            highlightthickness=0,
+            padx=10,
+            pady=10,
+            font=("DejaVu Sans Mono", 10),
+        )
+        self.editor.grid(row=2, column=0, sticky="nsew", padx=6, pady=(0, 6))
+        self.editor.bind("<KeyRelease>", lambda _e: self.schedule_save())
+        self.editor.bind("<KeyRelease>", lambda _e: self.update_counter(), add="+")
+
+        bottom = ttk.Frame(self)
+        bottom.grid(row=2, column=0, sticky="ew", padx=14, pady=(2, 10))
+        bottom.grid_columnconfigure(0, weight=1)
+        ttk.Label(bottom, textvariable=self.status_var, style="Muted.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(bottom, textvariable=self.counter_var, style="Muted.TLabel").grid(row=0, column=1, sticky="e")
+
+    def load_notes(self) -> None:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        if DATA_FILE.exists():
+            try:
+                data = json.loads(DATA_FILE.read_text(encoding="utf-8"))
+                self.notes = data.get("notes", [])
+            except Exception:
+                self.notes = []
+        self.notes = [note for note in self.notes if isinstance(note, dict) and note.get("id")]
+        self.notes.sort(key=lambda n: n.get("updated_at", ""), reverse=True)
+
+    def save_notes(self) -> None:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        DATA_FILE.write_text(json.dumps({"notes": self.notes}, indent=2), encoding="utf-8")
+
+    def refresh_list(self, keep_id: str | None = None) -> None:
+        query = self.search_var.get().strip().lower()
+        self.filtered = []
+        for note in self.notes:
+            text = " ".join(
+                [
+                    note.get("title", ""),
+                    note.get("body", ""),
+                    " ".join(note.get("tags", [])),
+                ]
+            ).lower()
+            if query and query not in text:
+                continue
+            self.filtered.append(note)
+
+        self.note_list.delete(0, tk.END)
+        idx_to_select = None
+        for idx, note in enumerate(self.filtered):
+            label = note.get("title") or "Untitled Note"
+            tags = ", ".join(note.get("tags", []))
+            if tags:
+                label = f"{label}  [{tags}]"
+            self.note_list.insert(tk.END, label)
+            if keep_id and note.get("id") == keep_id:
+                idx_to_select = idx
+
+        if idx_to_select is not None:
+            self.note_list.selection_set(idx_to_select)
+            self.current_id = keep_id
+        elif self.filtered:
+            self.note_list.selection_set(0)
+            self.current_id = self.filtered[0].get("id")
+        else:
+            self.current_id = None
+            self.clear_editor()
+
+        self.on_select()
+
+    def selected_note(self) -> dict | None:
+        if not self.current_id:
+            return None
+        for note in self.notes:
+            if note.get("id") == self.current_id:
+                return note
+        return None
+
+    def on_select(self) -> None:
+        if not self.note_list.curselection():
+            if self.filtered:
+                self.note_list.selection_set(0)
+            else:
+                self.clear_editor()
+                return
+        idx = self.note_list.curselection()[0]
+        if idx < 0 or idx >= len(self.filtered):
+            return
+        note = self.filtered[idx]
+        self.current_id = note.get("id")
+        self.title_entry.delete(0, tk.END)
+        self.title_entry.insert(0, note.get("title", ""))
+        self.tags_entry.delete(0, tk.END)
+        self.tags_entry.insert(0, ", ".join(note.get("tags", [])))
+        self.editor.delete("1.0", tk.END)
+        self.editor.insert("1.0", note.get("body", ""))
+        self.status_var.set(f"Selected: {note.get('title') or 'Untitled Note'}")
+        self.update_counter()
+
+    def clear_editor(self) -> None:
+        self.title_entry.delete(0, tk.END)
+        self.tags_entry.delete(0, tk.END)
+        self.editor.delete("1.0", tk.END)
+        self.update_counter()
+        self.status_var.set("No note selected")
+
+    def schedule_save(self) -> None:
+        if self.save_after_id:
+            self.after_cancel(self.save_after_id)
+        self.save_after_id = self.after(350, self.commit_current)
+
+    def commit_current(self) -> None:
+        self.save_after_id = None
+        note = self.selected_note()
+        if not note:
+            return
+        note["title"] = self.title_entry.get().strip()
+        note["tags"] = [tag.strip() for tag in self.tags_entry.get().split(",") if tag.strip()]
+        note["body"] = self.editor.get("1.0", tk.END).rstrip("\n")
+        note["updated_at"] = now_iso()
+        self.notes.sort(key=lambda n: n.get("updated_at", ""), reverse=True)
+        self.save_notes()
+        self.refresh_list(keep_id=note.get("id"))
+        self.status_var.set(f"Saved: {note.get('title') or 'Untitled Note'}")
+
+    def new_note(self) -> None:
+        note = {
+            "id": uuid.uuid4().hex,
+            "title": "New Note",
+            "tags": [],
+            "body": "",
+            "created_at": now_iso(),
+            "updated_at": now_iso(),
+        }
+        self.notes.insert(0, note)
+        self.save_notes()
+        self.refresh_list(keep_id=note["id"])
+        self.status_var.set("New note created")
+
+    def duplicate_note(self) -> None:
+        src = self.selected_note()
+        if not src:
+            return
+        note = {
+            "id": uuid.uuid4().hex,
+            "title": f"{src.get('title', 'Untitled')} (Copy)",
+            "tags": list(src.get("tags", [])),
+            "body": src.get("body", ""),
+            "created_at": now_iso(),
+            "updated_at": now_iso(),
+        }
+        self.notes.insert(0, note)
+        self.save_notes()
+        self.refresh_list(keep_id=note["id"])
+        self.status_var.set("Note duplicated")
+
+    def delete_note(self) -> None:
+        note = self.selected_note()
+        if not note:
+            return
+        if not messagebox.askyesno("Delete Note", f"Delete '{note.get('title') or 'Untitled Note'}'?"):
+            return
+        self.notes = [n for n in self.notes if n.get("id") != note.get("id")]
+        self.save_notes()
+        self.refresh_list()
+        self.status_var.set("Note deleted")
+
+    def import_note(self) -> None:
+        path = filedialog.askopenfilename(title="Import Text Note", filetypes=[("Text files", "*.txt"), ("All files", "*.*")])
+        if not path:
+            return
+        try:
+            content = Path(path).read_text(encoding="utf-8")
+        except Exception as exc:
+            messagebox.showerror("Import Failed", str(exc))
+            return
+        title = Path(path).stem or "Imported Note"
+        note = {
+            "id": uuid.uuid4().hex,
+            "title": title,
+            "tags": ["imported"],
+            "body": content,
+            "created_at": now_iso(),
+            "updated_at": now_iso(),
+        }
+        self.notes.insert(0, note)
+        self.save_notes()
+        self.refresh_list(keep_id=note["id"])
+        self.status_var.set(f"Imported: {title}")
+
+    def export_note(self) -> None:
+        note = self.selected_note()
+        if not note:
+            messagebox.showinfo("Export", "Select a note first.")
+            return
+        initial = f"{(note.get('title') or 'note').strip().replace('/', '-')}.txt"
+        path = filedialog.asksaveasfilename(
+            title="Export Note",
+            defaultextension=".txt",
+            initialfile=initial,
+            filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        try:
+            Path(path).write_text(note.get("body", ""), encoding="utf-8")
+            self.status_var.set(f"Exported: {Path(path).name}")
+        except Exception as exc:
+            messagebox.showerror("Export Failed", str(exc))
+
+    def update_counter(self) -> None:
+        body = self.editor.get("1.0", tk.END).strip()
+        words = len(body.split()) if body else 0
+        chars = len(body)
+        self.counter_var.set(f"Words: {words}  |  Chars: {chars}")
+
+
+def main() -> int:
+    app = LumenNotes()
+    app.mainloop()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

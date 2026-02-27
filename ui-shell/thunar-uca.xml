@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<actions>
+  <action>
+    <icon>preferences-desktop-wallpaper</icon>
+    <name>Set As CRIXA Wallpaper</name>
+    <submenu></submenu>
+    <unique-id>1700000000000001-1</unique-id>
+    <command>crixa-wallpaper set %f</command>
+    <description>Set selected image as desktop wallpaper</description>
+    <range></range>
+    <patterns>*.jpg;*.jpeg;*.png;*.webp;*.bmp;*.svg;</patterns>
+    <directories/>
+    <audio-files/>
+    <image-files/>
+    <other-files/>
+    <text-files/>
+    <video-files/>
+  </action>
+  <action>
+    <icon>media-skip-forward</icon>
+    <name>CRIXA Wallpaper Next</name>
+    <submenu></submenu>
+    <unique-id>1700000000000001-2</unique-id>
+    <command>crixa-wallpaper next</command>
+    <description>Switch to next CRIXA wallpaper</description>
+    <range></range>
+    <patterns>*</patterns>
+    <directories/>
+    <audio-files/>
+    <image-files/>
+    <other-files/>
+    <text-files/>
+    <video-files/>
+  </action>
+  <action>
+    <icon>media-skip-backward</icon>
+    <name>CRIXA Wallpaper Previous</name>
+    <submenu></submenu>
+    <unique-id>1700000000000001-3</unique-id>
+    <command>crixa-wallpaper prev</command>
+    <description>Switch to previous CRIXA wallpaper</description>
+    <range></range>
+    <patterns>*</patterns>
+    <directories/>
+    <audio-files/>
+    <image-files/>
+    <other-files/>
+    <text-files/>
+    <video-files/>
+  </action>
+  <action>
+    <icon>media-playlist-shuffle</icon>
+    <name>CRIXA Wallpaper Random</name>
+    <submenu></submenu>
+    <unique-id>1700000000000001-4</unique-id>
+    <command>crixa-wallpaper random</command>
+    <description>Switch to a random CRIXA wallpaper</description>
+    <range></range>
+    <patterns>*</patterns>
+    <directories/>
+    <audio-files/>
+    <image-files/>
+    <other-files/>
+    <text-files/>
+    <video-files/>
+  </action>
+</actions>

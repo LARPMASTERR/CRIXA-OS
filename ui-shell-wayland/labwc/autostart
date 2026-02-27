@@ -1,0 +1,11 @@
+#!/bin/sh
+
+if command -v swaybg >/dev/null 2>&1; then
+  WALL="$(crixa-wallpaper status 2>/dev/null || true)"
+  [ -f "$WALL" ] || WALL="/usr/share/backgrounds/crixa-wallpaper.jpg"
+  swaybg -i "$WALL" -m fill >/dev/null 2>&1 &
+fi
+
+if command -v waybar >/dev/null 2>&1; then
+  waybar >/dev/null 2>&1 &
+fi

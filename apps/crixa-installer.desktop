@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=CRIXA Installer
+Comment=Install CRIXA OS to disk
+Exec=crixa-installer
+Icon=crixa-installer
+Terminal=false
+Categories=System;Settings;
+StartupNotify=true
