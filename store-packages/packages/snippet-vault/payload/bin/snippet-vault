@@ -1,0 +1,150 @@
+#!/usr/bin/env python3
+import json
+import uuid
+from pathlib import Path
+import tkinter as tk
+from tkinter import messagebox, ttk
+
+DATA_DIR = Path.home() / ".local" / "share" / "snippet-vault"
+DATA_FILE = DATA_DIR / "snippets.json"
+
+
+class SnippetVault(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("Snippet Vault")
+        self.geometry("900x620")
+        self.minsize(740, 500)
+        self.configure(bg="#14171b")
+        self.items = []
+        self.filtered = []
+        self.current_id = None
+        self.search = tk.StringVar()
+        self.search.trace_add("write", lambda *_: self.refresh())
+        self.status = tk.StringVar(value="Ready")
+        self._style()
+        self._ui()
+        self.load()
+        self.refresh()
+
+    def _style(self):
+        self.style = ttk.Style(self)
+        try:
+            self.style.theme_use("clam")
+        except tk.TclError:
+            pass
+        self.style.configure(".", background="#14171b", foreground="#edf5f2", font=("Helvetica", 10))
+        self.style.configure("TButton", padding=(10, 7))
+        self.style.configure("Muted.TLabel", foreground="#98a6a2")
+
+    def _ui(self):
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(1, weight=1)
+        top = ttk.Frame(self)
+        top.grid(row=0, column=0, sticky="ew", padx=14, pady=14)
+        top.grid_columnconfigure(2, weight=1)
+        ttk.Label(top, text="Snippet Vault", font=("Helvetica", 18, "bold")).grid(row=0, column=0, padx=(0, 10))
+        ttk.Button(top, text="New", command=self.new).grid(row=0, column=1, padx=4)
+        ttk.Entry(top, textvariable=self.search).grid(row=0, column=2, sticky="ew", padx=8)
+        ttk.Button(top, text="Copy", command=self.copy).grid(row=0, column=3, padx=4)
+        ttk.Button(top, text="Delete", command=self.delete).grid(row=0, column=4, padx=4)
+        body = ttk.Frame(self)
+        body.grid(row=1, column=0, sticky="nsew", padx=14, pady=(0, 10))
+        body.grid_columnconfigure(1, weight=1)
+        body.grid_rowconfigure(0, weight=1)
+        self.listbox = tk.Listbox(body, bg="#0f1216", fg="#edf5f2", selectbackground="#1a7f78", relief="flat", width=30)
+        self.listbox.grid(row=0, column=0, sticky="nsw", padx=(0, 12))
+        self.listbox.bind("<<ListboxSelect>>", lambda _e: self.select())
+        editor = ttk.Frame(body)
+        editor.grid(row=0, column=1, sticky="nsew")
+        editor.grid_columnconfigure(1, weight=1)
+        editor.grid_rowconfigure(2, weight=1)
+        ttk.Label(editor, text="Title", style="Muted.TLabel").grid(row=0, column=0, sticky="w", padx=4, pady=4)
+        self.title = ttk.Entry(editor)
+        self.title.grid(row=0, column=1, sticky="ew", padx=4, pady=4)
+        ttk.Label(editor, text="Tags", style="Muted.TLabel").grid(row=1, column=0, sticky="w", padx=4, pady=4)
+        self.tags = ttk.Entry(editor)
+        self.tags.grid(row=1, column=1, sticky="ew", padx=4, pady=4)
+        self.body = tk.Text(editor, bg="#0f1216", fg="#edf5f2", insertbackground="#edf5f2", relief="flat", wrap="word", padx=10, pady=10)
+        self.body.grid(row=2, column=0, columnspan=2, sticky="nsew", padx=4, pady=8)
+        ttk.Button(editor, text="Save", command=self.save_current).grid(row=3, column=1, sticky="e", padx=4, pady=4)
+        ttk.Label(self, textvariable=self.status, style="Muted.TLabel").grid(row=2, column=0, sticky="ew", padx=18, pady=(0, 12))
+
+    def load(self):
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        if DATA_FILE.exists():
+            try:
+                self.items = json.loads(DATA_FILE.read_text()).get("snippets", [])
+            except Exception:
+                self.items = []
+
+    def save_all(self):
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        DATA_FILE.write_text(json.dumps({"snippets": self.items}, indent=2))
+
+    def refresh(self):
+        q = self.search.get().lower()
+        self.filtered = [s for s in self.items if q in f"{s.get('title','')} {s.get('tags','')} {s.get('body','')}".lower()]
+        self.listbox.delete(0, tk.END)
+        for item in self.filtered:
+            self.listbox.insert(tk.END, item.get("title") or "Untitled")
+        if self.filtered:
+            self.listbox.selection_set(0)
+            self.select()
+
+    def new(self):
+        item = {"id": uuid.uuid4().hex, "title": "New Snippet", "tags": "", "body": ""}
+        self.items.insert(0, item)
+        self.current_id = item["id"]
+        self.save_all()
+        self.refresh()
+
+    def select(self):
+        if not self.listbox.curselection():
+            return
+        item = self.filtered[self.listbox.curselection()[0]]
+        self.current_id = item["id"]
+        self.title.delete(0, tk.END)
+        self.title.insert(0, item.get("title", ""))
+        self.tags.delete(0, tk.END)
+        self.tags.insert(0, item.get("tags", ""))
+        self.body.delete("1.0", tk.END)
+        self.body.insert("1.0", item.get("body", ""))
+        self.status.set(f"Selected {item.get('title') or 'Untitled'}")
+
+    def current(self):
+        for item in self.items:
+            if item.get("id") == self.current_id:
+                return item
+        return None
+
+    def save_current(self):
+        item = self.current()
+        if not item:
+            return
+        item["title"] = self.title.get().strip() or "Untitled"
+        item["tags"] = self.tags.get().strip()
+        item["body"] = self.body.get("1.0", "end-1c")
+        self.save_all()
+        self.refresh()
+        self.status.set("Saved")
+
+    def copy(self):
+        item = self.current()
+        if not item:
+            return
+        self.clipboard_clear()
+        self.clipboard_append(self.body.get("1.0", "end-1c"))
+        self.status.set("Copied snippet body")
+
+    def delete(self):
+        item = self.current()
+        if item and messagebox.askyesno("Delete", f"Delete {item.get('title') or 'snippet'}?"):
+            self.items = [row for row in self.items if row.get("id") != item.get("id")]
+            self.current_id = None
+            self.save_all()
+            self.refresh()
+
+
+if __name__ == "__main__":
+    SnippetVault().mainloop()

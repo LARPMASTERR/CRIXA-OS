@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-LIGHTDM_FILE="/etc/lightdm/lightdm.conf.d/50-crixa-autologin.conf"
-WAYLAND_SESSION="crixa-wayland"
-X11_SESSION="openbox"
+SDDM_AUTOLOGIN_FILE="/etc/sddm.conf.d/20-crixa-autologin.conf"
+WAYLAND_SESSION="plasmawayland.desktop"
+X11_SESSION="plasma.desktop"
 
 usage() {
   cat <<'EOF'
@@ -21,11 +21,19 @@ ensure_root() {
 }
 
 current_session() {
-  if [[ -f "$LIGHTDM_FILE" ]]; then
-    awk -F= '/^\s*user-session=/{print $2; exit}' "$LIGHTDM_FILE"
+  if [[ -f "$SDDM_AUTOLOGIN_FILE" ]]; then
+    awk -F= '/^\s*Session=/{print $2; exit}' "$SDDM_AUTOLOGIN_FILE"
     return
   fi
   printf '%s\n' "$X11_SESSION"
+}
+
+current_user() {
+  if [[ -f "$SDDM_AUTOLOGIN_FILE" ]]; then
+    awk -F= '/^\s*User=/{print $2; exit}' "$SDDM_AUTOLOGIN_FILE"
+    return
+  fi
+  printf '%s\n' "${SUDO_USER:-$(id -un)}"
 }
 
 current_mode() {
@@ -40,29 +48,20 @@ current_mode() {
 
 write_mode() {
   local mode="$1"
+  local user
   local session="$X11_SESSION"
+  user="$(current_user)"
   if [[ "$mode" == "wayland" ]]; then
     session="$WAYLAND_SESSION"
   fi
 
-  mkdir -p "$(dirname "$LIGHTDM_FILE")"
-  if [[ ! -f "$LIGHTDM_FILE" ]]; then
-    cat > "$LIGHTDM_FILE" <<EOF
-[Seat:*]
-autologin-user=crixa
-autologin-user-timeout=0
-user-session=$session
-greeter-hide-users=true
-allow-guest=false
+  mkdir -p "$(dirname "$SDDM_AUTOLOGIN_FILE")"
+  cat > "$SDDM_AUTOLOGIN_FILE" <<EOF
+[Autologin]
+User=$user
+Session=$session
+Relogin=false
 EOF
-    return
-  fi
-
-  if grep -q '^\s*user-session=' "$LIGHTDM_FILE"; then
-    sed -i "s/^\s*user-session=.*/user-session=$session/" "$LIGHTDM_FILE"
-  else
-    printf 'user-session=%s\n' "$session" >> "$LIGHTDM_FILE"
-  fi
 }
 
 main() {

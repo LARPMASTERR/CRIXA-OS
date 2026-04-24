@@ -1,10 +1,10 @@
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=CRIXA Control Center
-Comment=Visual and system controls for CRIXA OS
+Name=Bridge
+Comment=System controls, appearance, and hardware settings
 Exec=crixa-settings
-Icon=crixa-settings
+Icon=preferences-system
 Terminal=false
 Categories=Settings;System;
 StartupNotify=false

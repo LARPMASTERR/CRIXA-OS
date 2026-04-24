@@ -1,0 +1,19 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Email": "team@crixa.dev",
+                "Name": "CRIXA"
+            }
+        ],
+        "Category": "",
+        "Description": "A focused Plasma shell layout for CRIXA OS",
+        "EnabledByDefault": true,
+        "Id": "org.crixa.shell.desktop",
+        "License": "GPL-3.0-or-later",
+        "Name": "CRIXA Shell",
+        "Version": "1.0",
+        "Website": "https://crixa.dev"
+    },
+    "X-Plasma-API": "5.0"
+}

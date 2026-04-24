@@ -11,15 +11,21 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 SYSTEM_BACKEND_DIR = Path("/usr/share/crixa-store/backends")
+SYSTEM_CATALOG_PATH = Path("/usr/share/crixa-store/catalog.json")
 USER_BACKEND_DIRS = [
     Path.home() / ".local" / "share" / "crixa-store" / "backends",
     Path.home() / ".config" / "crixa-store" / "backends",
 ]
+DEV_ROOT = Path(__file__).resolve().parents[1] if Path(__file__).resolve().parent.name == "apps" else None
+DEV_BACKEND_DIR = DEV_ROOT / "store-backends" / "manifests" if DEV_ROOT else None
+DEV_CATALOG_PATH = DEV_ROOT / "store-packages" / "catalog.json" if DEV_ROOT else None
 
 DEFAULT_BACKEND = "crixa-repo"
+ALL_CATEGORIES = "All"
+INSTALLED_CATEGORY = "Installed"
 
 
-@dataclass
+@dataclass(slots=True)
 class Backend:
     backend_id: str
     name: str
@@ -33,6 +39,12 @@ class Backend:
 def ensure_app_shape(app: dict, source_id: str) -> dict:
     app_id = str(app.get("id", "")).strip()
     name = str(app.get("name", app_id or "Unnamed")).strip() or app_id or "Unnamed"
+    tags = app.get("tags", [])
+    if not isinstance(tags, list):
+        tags = []
+    features = app.get("features", [])
+    if not isinstance(features, list):
+        features = []
     return {
         "id": app_id,
         "name": name,
@@ -40,7 +52,8 @@ def ensure_app_shape(app: dict, source_id: str) -> dict:
         "category": str(app.get("category", "General")),
         "summary": str(app.get("summary", "")),
         "description": str(app.get("description", "")),
-        "features": app.get("features", []) if isinstance(app.get("features"), list) else [],
+        "features": [str(item) for item in features],
+        "tags": [str(item) for item in tags],
         "entrypoint": str(app.get("entrypoint", "")),
         "size": str(app.get("size", "")),
         "installed": bool(app.get("installed", False)),
@@ -51,24 +64,28 @@ def ensure_app_shape(app: dict, source_id: str) -> dict:
 class CrixaStore(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
-        self.title("CRIXA Store")
-        self.geometry("1130x730")
-        self.minsize(980, 640)
-        self.configure(bg="#0a162b")
+        self.title("Foundry")
+        self.geometry("1240x780")
+        self.minsize(1040, 660)
+        self.configure(bg="#111418")
 
         self.backends: list[Backend] = []
         self.backend_map: dict[str, Backend] = {}
+        self.all_apps: list[dict] = []
         self.filtered_apps: list[dict] = []
+        self.category_buttons: dict[str, tk.Button] = {}
 
         self.search_var = tk.StringVar()
         self.search_var.trace_add("write", lambda *_: self.refresh_apps_list())
         self.source_var = tk.StringVar(value=DEFAULT_BACKEND)
         self.source_label_var = tk.StringVar(value="")
-        self.status_var = tk.StringVar(value="Store ready")
+        self.status_var = tk.StringVar(value="Foundry ready")
+        self.selected_category = ALL_CATEGORIES
 
         self.setup_style()
         self.build_ui()
-        self.reload_backends(initial=True)
+        self.set_status("Opening Foundry...")
+        self.after(80, lambda: self.reload_backends(initial=True))
 
     def setup_style(self) -> None:
         self.style = ttk.Style(self)
@@ -76,109 +93,181 @@ class CrixaStore(tk.Tk):
             self.style.theme_use("clam")
         except tk.TclError:
             pass
-
         self.colors = {
-            "bg": "#0a162b",
-            "panel": "#10233f",
-            "panel_alt": "#0f2038",
-            "accent": "#2f80ed",
-            "text": "#dbeafe",
-            "muted": "#8ea7cb",
+            "bg": "#111418",
+            "rail": "#171b20",
+            "panel": "#1d242b",
+            "panel_alt": "#222b33",
+            "field": "#0f1216",
+            "line": "#33404a",
+            "accent": "#32c7b8",
+            "accent_dark": "#1a7f78",
+            "warm": "#f2b84b",
+            "danger": "#d96565",
+            "text": "#eef4f2",
+            "muted": "#9aa9a8",
+            "subtle": "#738280",
         }
-        self.style.configure(".", background=self.colors["bg"], foreground=self.colors["text"], font=("DejaVu Sans", 10))
-        self.style.configure("Panel.TFrame", background=self.colors["panel"])
-        self.style.configure("PanelAlt.TFrame", background=self.colors["panel_alt"])
-        self.style.configure("Title.TLabel", font=("DejaVu Sans", 16, "bold"))
-        self.style.configure("Muted.TLabel", foreground=self.colors["muted"])
+        self.option_add("*Font", "Helvetica 10")
+        self.option_add("*Entry.relief", "flat")
+        self.style.configure(".", background=self.colors["bg"], foreground=self.colors["text"], font=("Helvetica", 10))
+        self.style.configure("Surface.TFrame", background=self.colors["panel"])
+        self.style.configure("SurfaceAlt.TFrame", background=self.colors["panel_alt"])
+        self.style.configure("Rail.TFrame", background=self.colors["rail"])
+        self.style.configure("Title.TLabel", background=self.colors["panel"], foreground=self.colors["text"], font=("Helvetica", 19, "bold"))
+        self.style.configure("Section.TLabel", background=self.colors["panel"], foreground=self.colors["text"], font=("Helvetica", 11, "bold"))
+        self.style.configure("Muted.TLabel", background=self.colors["panel"], foreground=self.colors["muted"])
+        self.style.configure("RailMuted.TLabel", background=self.colors["rail"], foreground=self.colors["muted"])
         self.style.configure("TButton", padding=(12, 8))
-        self.style.map("TButton", background=[("active", self.colors["accent"])], foreground=[("active", "#ffffff")])
+        self.style.configure("Accent.TButton", padding=(14, 9))
+        self.style.map("Accent.TButton", background=[("active", self.colors["accent_dark"])])
+        self.style.configure(
+            "Store.Treeview",
+            background=self.colors["field"],
+            fieldbackground=self.colors["field"],
+            foreground=self.colors["text"],
+            rowheight=34,
+            borderwidth=0,
+        )
+        self.style.map("Store.Treeview", background=[("selected", self.colors["accent_dark"])], foreground=[("selected", "#ffffff")])
+        self.style.configure("Store.Treeview.Heading", background=self.colors["panel_alt"], foreground=self.colors["text"], padding=(8, 8))
 
     def build_ui(self) -> None:
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(1, weight=1)
+        self.grid_columnconfigure(1, weight=1)
+        self.grid_rowconfigure(0, weight=1)
 
-        top = ttk.Frame(self, style="Panel.TFrame")
-        top.grid(row=0, column=0, sticky="ew", padx=12, pady=(12, 8))
-        top.grid_columnconfigure(2, weight=1)
+        rail = ttk.Frame(self, style="Rail.TFrame")
+        rail.grid(row=0, column=0, sticky="nsw")
+        rail.grid_rowconfigure(4, weight=1)
 
-        ttk.Label(top, text="CRIXA Store", style="Title.TLabel").grid(row=0, column=0, sticky="w", padx=(12, 10), pady=12)
+        tk.Label(
+            rail,
+            text="Foundry",
+            bg=self.colors["rail"],
+            fg=self.colors["text"],
+            font=("Helvetica", 21, "bold"),
+        ).grid(row=0, column=0, sticky="w", padx=18, pady=(20, 4))
+        tk.Label(
+            rail,
+            text="CRIXA app catalog",
+            bg=self.colors["rail"],
+            fg=self.colors["muted"],
+        ).grid(row=1, column=0, sticky="w", padx=18, pady=(0, 18))
 
-        self.source_combo = ttk.Combobox(top, textvariable=self.source_label_var, state="readonly", width=28)
-        self.source_combo.grid(row=0, column=1, sticky="w", padx=(0, 10), pady=12)
+        self.source_combo = ttk.Combobox(rail, textvariable=self.source_label_var, state="readonly", width=27)
+        self.source_combo.grid(row=2, column=0, sticky="ew", padx=18, pady=(0, 12))
         self.source_combo.bind("<<ComboboxSelected>>", lambda _e: self.refresh_apps_list())
 
-        search_entry = ttk.Entry(top, textvariable=self.search_var)
-        search_entry.grid(row=0, column=2, sticky="ew", padx=(0, 12), pady=12)
+        ttk.Label(rail, text="Browse", style="RailMuted.TLabel").grid(row=3, column=0, sticky="w", padx=18, pady=(2, 6))
+        self.category_frame = ttk.Frame(rail, style="Rail.TFrame")
+        self.category_frame.grid(row=4, column=0, sticky="nsew", padx=12, pady=(0, 12))
 
-        body = ttk.Frame(self, style="PanelAlt.TFrame")
-        body.grid(row=1, column=0, sticky="nsew", padx=12, pady=8)
+        rail_actions = ttk.Frame(rail, style="Rail.TFrame")
+        rail_actions.grid(row=5, column=0, sticky="sew", padx=18, pady=(0, 18))
+        ttk.Button(rail_actions, text="Upgrade Installed", command=self.upgrade_selected_backend).pack(fill="x", pady=(0, 8))
+        ttk.Button(rail_actions, text="Backends", command=self.open_user_backend_folder).pack(fill="x", pady=(0, 8))
+        ttk.Button(rail_actions, text="Reload", command=self.reload_backends).pack(fill="x")
+
+        main = ttk.Frame(self, style="Surface.TFrame")
+        main.grid(row=0, column=1, sticky="nsew", padx=(0, 14), pady=14)
+        main.grid_columnconfigure(0, weight=1)
+        main.grid_rowconfigure(2, weight=1)
+
+        header = ttk.Frame(main, style="Surface.TFrame")
+        header.grid(row=0, column=0, sticky="ew", padx=18, pady=(18, 12))
+        header.grid_columnconfigure(1, weight=1)
+        ttk.Label(header, text="Software", style="Title.TLabel").grid(row=0, column=0, sticky="w")
+        search = tk.Entry(
+            header,
+            textvariable=self.search_var,
+            bg=self.colors["field"],
+            fg=self.colors["text"],
+            insertbackground=self.colors["text"],
+            relief="flat",
+            highlightthickness=1,
+            highlightbackground=self.colors["line"],
+            highlightcolor=self.colors["accent"],
+            font=("Helvetica", 11),
+        )
+        search.grid(row=0, column=1, sticky="ew", padx=(18, 0), ipady=8)
+
+        self.hero = tk.Frame(main, bg=self.colors["panel_alt"], highlightthickness=1, highlightbackground=self.colors["line"])
+        self.hero.grid(row=1, column=0, sticky="ew", padx=18, pady=(0, 12))
+        self.hero.grid_columnconfigure(0, weight=1)
+        self.hero_title = tk.Label(self.hero, text="Curated CRIXA Apps", bg=self.colors["panel_alt"], fg=self.colors["text"], font=("Helvetica", 15, "bold"))
+        self.hero_title.grid(row=0, column=0, sticky="w", padx=14, pady=(12, 2))
+        self.hero_copy = tk.Label(self.hero, text="", bg=self.colors["panel_alt"], fg=self.colors["muted"], justify="left")
+        self.hero_copy.grid(row=1, column=0, sticky="w", padx=14, pady=(0, 12))
+        self.hero_stats = tk.Label(self.hero, text="", bg=self.colors["panel_alt"], fg=self.colors["warm"], font=("Helvetica", 10, "bold"))
+        self.hero_stats.grid(row=0, column=1, rowspan=2, sticky="e", padx=14, pady=12)
+
+        body = ttk.Frame(main, style="Surface.TFrame")
+        body.grid(row=2, column=0, sticky="nsew", padx=18, pady=(0, 12))
+        body.grid_columnconfigure(0, weight=2)
         body.grid_columnconfigure(1, weight=1)
         body.grid_rowconfigure(0, weight=1)
 
-        left = ttk.Frame(body, style="Panel.TFrame")
-        left.grid(row=0, column=0, sticky="nsw", padx=(12, 8), pady=12)
-        left.grid_rowconfigure(1, weight=1)
+        list_panel = ttk.Frame(body, style="SurfaceAlt.TFrame")
+        list_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+        list_panel.grid_columnconfigure(0, weight=1)
+        list_panel.grid_rowconfigure(1, weight=1)
+        self.count_label = ttk.Label(list_panel, text="0 apps", style="Muted.TLabel")
+        self.count_label.grid(row=0, column=0, sticky="w", padx=12, pady=(12, 8))
 
-        ttk.Label(left, text="Applications").grid(row=0, column=0, sticky="w", padx=8, pady=(8, 4))
-        self.apps_listbox = tk.Listbox(
-            left,
-            width=42,
-            height=30,
-            bg="#0d1d33",
-            fg="#dbeafe",
-            selectbackground="#2f80ed",
-            selectforeground="#ffffff",
-            relief="flat",
-            highlightthickness=0,
-            activestyle="none",
-            font=("DejaVu Sans", 10),
-        )
-        self.apps_listbox.grid(row=1, column=0, sticky="nsew", padx=8, pady=(0, 8))
-        self.apps_listbox.bind("<<ListboxSelect>>", lambda _e: self.on_select())
+        columns = ("status", "name", "category", "version", "size")
+        self.apps_tree = ttk.Treeview(list_panel, columns=columns, show="headings", style="Store.Treeview", selectmode="browse")
+        for key, label, width in (
+            ("status", "", 32),
+            ("name", "Application", 230),
+            ("category", "Category", 120),
+            ("version", "Version", 78),
+            ("size", "Size", 78),
+        ):
+            self.apps_tree.heading(key, text=label)
+            self.apps_tree.column(key, width=width, minwidth=width if key != "name" else 180, stretch=key == "name")
+        self.apps_tree.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 12))
+        self.apps_tree.bind("<<TreeviewSelect>>", lambda _e: self.on_select())
+        self.apps_tree.bind("<Double-Button-1>", lambda _e: self.launch_or_install_selected())
 
-        self.count_label = ttk.Label(left, text="0 apps", style="Muted.TLabel")
-        self.count_label.grid(row=2, column=0, sticky="w", padx=8, pady=(0, 8))
-
-        right = ttk.Frame(body, style="Panel.TFrame")
-        right.grid(row=0, column=1, sticky="nsew", padx=(8, 12), pady=12)
-        right.grid_columnconfigure(0, weight=1)
-        right.grid_rowconfigure(1, weight=1)
+        detail = ttk.Frame(body, style="SurfaceAlt.TFrame")
+        detail.grid(row=0, column=1, sticky="nsew")
+        detail.grid_columnconfigure(0, weight=1)
+        detail.grid_rowconfigure(3, weight=1)
 
         self.title_var = tk.StringVar(value="Select an app")
         self.meta_var = tk.StringVar(value="")
-        ttk.Label(right, textvariable=self.title_var, style="Title.TLabel").grid(row=0, column=0, sticky="w", padx=12, pady=(12, 2))
-        ttk.Label(right, textvariable=self.meta_var, style="Muted.TLabel").grid(row=0, column=0, sticky="w", padx=12, pady=(40, 10))
+        ttk.Label(detail, textvariable=self.title_var, style="Title.TLabel").grid(row=0, column=0, sticky="w", padx=14, pady=(14, 2))
+        ttk.Label(detail, textvariable=self.meta_var, style="Muted.TLabel").grid(row=1, column=0, sticky="w", padx=14, pady=(0, 10))
+
+        self.tag_line = tk.Label(detail, text="", bg=self.colors["panel_alt"], fg=self.colors["warm"], justify="left", wraplength=350)
+        self.tag_line.grid(row=2, column=0, sticky="ew", padx=14, pady=(0, 8))
 
         self.details_text = tk.Text(
-            right,
+            detail,
             wrap="word",
-            bg="#0b1a30",
-            fg="#dbeafe",
+            bg=self.colors["field"],
+            fg=self.colors["text"],
             relief="flat",
-            highlightthickness=0,
+            highlightthickness=1,
+            highlightbackground=self.colors["line"],
             padx=12,
             pady=12,
-            font=("DejaVu Sans", 10),
+            font=("Helvetica", 10),
         )
-        self.details_text.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 8))
+        self.details_text.grid(row=3, column=0, sticky="nsew", padx=14, pady=(0, 12))
         self.details_text.configure(state="disabled")
 
-        actions = ttk.Frame(right, style="PanelAlt.TFrame")
-        actions.grid(row=2, column=0, sticky="ew", padx=12, pady=(0, 12))
-        self.install_btn = ttk.Button(actions, text="Install", command=self.install_selected)
+        actions = ttk.Frame(detail, style="SurfaceAlt.TFrame")
+        actions.grid(row=4, column=0, sticky="ew", padx=14, pady=(0, 14))
+        self.install_btn = ttk.Button(actions, text="Install", style="Accent.TButton", command=self.install_selected)
         self.install_btn.pack(side="left", padx=(0, 8))
-        self.remove_btn = ttk.Button(actions, text="Remove", command=self.remove_selected)
-        self.remove_btn.pack(side="left", padx=8)
         self.launch_btn = ttk.Button(actions, text="Launch", command=self.launch_selected)
         self.launch_btn.pack(side="left", padx=8)
-        self.upgrade_btn = ttk.Button(actions, text="Upgrade Source", command=self.upgrade_selected_backend)
-        self.upgrade_btn.pack(side="left", padx=8)
-        ttk.Button(actions, text="Backends Folder", command=self.open_user_backend_folder).pack(side="left", padx=8)
-        ttk.Button(actions, text="Reload Backends", command=self.reload_backends).pack(side="left", padx=8)
+        self.remove_btn = ttk.Button(actions, text="Remove", command=self.remove_selected)
+        self.remove_btn.pack(side="left", padx=8)
         ttk.Button(actions, text="Close", command=self.destroy).pack(side="right")
 
-        status = ttk.Label(self, textvariable=self.status_var, style="Muted.TLabel")
-        status.grid(row=2, column=0, sticky="ew", padx=20, pady=(4, 10))
+        ttk.Label(main, textvariable=self.status_var, style="Muted.TLabel").grid(row=3, column=0, sticky="ew", padx=20, pady=(0, 14))
 
     def set_status(self, text: str) -> None:
         self.status_var.set(text)
@@ -188,6 +277,10 @@ class CrixaStore(tk.Tk):
         if not command_raw:
             return []
         command_path = Path(command_raw)
+        if DEV_ROOT is not None and command_path.is_absolute() and not command_path.exists():
+            local_backend = DEV_ROOT / "store-backends" / command_path.name
+            if local_backend.exists():
+                command_path = local_backend
         if not command_path.is_absolute():
             command_path = (manifest_path.parent / command_path).resolve()
         if command_path.suffix == ".py":
@@ -201,6 +294,8 @@ class CrixaStore(tk.Tk):
         backends: list[Backend] = []
         discovered_ids: set[str] = set()
         search_dirs = [SYSTEM_BACKEND_DIR, *USER_BACKEND_DIRS]
+        if DEV_BACKEND_DIR is not None:
+            search_dirs.append(DEV_BACKEND_DIR)
         for folder in search_dirs:
             if not folder.exists():
                 continue
@@ -218,17 +313,14 @@ class CrixaStore(tk.Tk):
                 command = self.command_for_manifest(manifest, manifest_path)
                 if not command:
                     continue
-                supports_upgrade = bool(manifest.get("supports_upgrade", True))
-                priority = int(manifest.get("priority", 100))
-                description = str(manifest.get("description", "")).strip()
                 backends.append(
                     Backend(
                         backend_id=backend_id,
                         name=name,
                         command=command,
-                        supports_upgrade=supports_upgrade,
-                        priority=priority,
-                        description=description,
+                        supports_upgrade=bool(manifest.get("supports_upgrade", True)),
+                        priority=int(manifest.get("priority", 100)),
+                        description=str(manifest.get("description", "")).strip(),
                         manifest_path=manifest_path,
                     )
                 )
@@ -236,10 +328,9 @@ class CrixaStore(tk.Tk):
         return sorted(backends, key=lambda row: (row.priority, row.name.lower()))
 
     def selected_backend(self) -> Backend | None:
-        backend_id = self.source_var.get().strip()
-        return self.backend_map.get(backend_id)
+        return self.backend_map.get(self.source_var.get().strip())
 
-    def call_backend(self, backend: Backend, payload: dict, timeout_sec: int = 300) -> tuple[bool, dict]:
+    def call_backend(self, backend: Backend, payload: dict, timeout_sec: int = 45) -> tuple[bool, dict]:
         try:
             result = subprocess.run(
                 backend.command,
@@ -253,13 +344,11 @@ class CrixaStore(tk.Tk):
             return False, {"ok": False, "error": f"{backend.name} backend timed out"}
         except Exception as exc:
             return False, {"ok": False, "error": str(exc)}
-
         output = result.stdout.strip()
         try:
             parsed = json.loads(output) if output else {}
         except json.JSONDecodeError:
             parsed = {"ok": False, "error": output or result.stderr.strip() or "invalid backend response"}
-
         if result.returncode != 0 and not parsed.get("ok", False):
             err = parsed.get("error") or parsed.get("message") or result.stderr.strip() or "backend command failed"
             return False, {"ok": False, "error": err}
@@ -269,18 +358,18 @@ class CrixaStore(tk.Tk):
         previous = self.source_var.get().strip()
         self.backends = self.load_backends()
         self.backend_map = {row.backend_id: row for row in self.backends}
-
         if not self.backends:
             self.source_combo.configure(values=[])
             self.source_var.set("")
             self.source_label_var.set("")
-            self.apps_listbox.delete(0, tk.END)
-            self.set_status("No store backends found")
+            self.all_apps = []
+            self.filtered_apps = []
+            self.refresh_category_buttons()
+            self.render_apps()
+            self.load_builtin_catalog("No store backends found. Showing bundled catalog.")
             return
-
         labels = [f"{row.name} [{row.backend_id}]" for row in self.backends]
         self.source_combo.configure(values=labels)
-
         selected_id = previous if previous in self.backend_map else DEFAULT_BACKEND
         if selected_id not in self.backend_map:
             selected_id = self.backends[0].backend_id
@@ -298,69 +387,156 @@ class CrixaStore(tk.Tk):
                 self.source_var.set(selected_id)
                 self.source_label_var.set(raw)
 
+    def refresh_category_buttons(self) -> None:
+        for child in self.category_frame.winfo_children():
+            child.destroy()
+        self.category_buttons.clear()
+        categories = [ALL_CATEGORIES, INSTALLED_CATEGORY]
+        categories.extend(sorted({app.get("category", "General") for app in self.all_apps}))
+        seen: set[str] = set()
+        unique = []
+        for item in categories:
+            if item not in seen:
+                unique.append(item)
+                seen.add(item)
+        if self.selected_category not in seen:
+            self.selected_category = ALL_CATEGORIES
+        for idx, category in enumerate(unique):
+            count = len(self.apps_for_category(category))
+            text = f"{category}  {count}"
+            active = category == self.selected_category
+            btn = tk.Button(
+                self.category_frame,
+                text=text,
+                command=lambda cat=category: self.select_category(cat),
+                anchor="w",
+                relief="flat",
+                bd=0,
+                bg=self.colors["accent_dark"] if active else self.colors["rail"],
+                fg="#ffffff" if active else self.colors["muted"],
+                activebackground=self.colors["accent_dark"],
+                activeforeground="#ffffff",
+                padx=12,
+                pady=8,
+            )
+            btn.grid(row=idx, column=0, sticky="ew", pady=1)
+            self.category_buttons[category] = btn
+
+    def apps_for_category(self, category: str) -> list[dict]:
+        if category == ALL_CATEGORIES:
+            return list(self.all_apps)
+        if category == INSTALLED_CATEGORY:
+            return [app for app in self.all_apps if app.get("installed")]
+        return [app for app in self.all_apps if app.get("category") == category]
+
+    def select_category(self, category: str) -> None:
+        self.selected_category = category
+        self.refresh_category_buttons()
+        self.render_apps()
+
     def selected_app(self) -> dict | None:
-        if not self.apps_listbox.curselection():
+        selected = self.apps_tree.selection()
+        if not selected:
             return None
-        idx = self.apps_listbox.curselection()[0]
-        if idx < 0 or idx >= len(self.filtered_apps):
-            return None
-        return self.filtered_apps[idx]
+        app_id = str(selected[0])
+        for app in self.filtered_apps:
+            if app.get("id") == app_id:
+                return app
+        return None
 
     def refresh_apps_list(self, selected_id: str | None = None) -> None:
         self.normalize_source_combo_selection()
         backend = self.selected_backend()
         if backend is None:
+            self.all_apps = []
             self.filtered_apps = []
-            self.apps_listbox.delete(0, tk.END)
-            self.on_select()
-            self.set_status("No backend selected")
+            self.refresh_category_buttons()
+            self.render_apps()
+            self.load_builtin_catalog("No backend selected. Showing bundled catalog.")
             return
-
-        query = self.search_var.get().strip()
-        ok, payload = self.call_backend(
-            backend,
-            {
-                "action": "list",
-                "query": query,
-                "limit": 260,
-            },
-        )
+        ok, payload = self.call_backend(backend, {"action": "list", "query": "", "limit": 500}, timeout_sec=12)
         if not ok:
-            self.filtered_apps = []
-            self.apps_listbox.delete(0, tk.END)
-            self.count_label.configure(text="backend error")
-            self.on_select()
-            self.set_status(payload.get("error", "Backend query failed"))
+            self.load_builtin_catalog(payload.get("error", "Backend query failed"))
             return
-
         apps = payload.get("apps", [])
         if not isinstance(apps, list):
             apps = []
-        normalized = [ensure_app_shape(item, backend.backend_id) for item in apps if isinstance(item, dict)]
-        self.filtered_apps = normalized
+        self.all_apps = [ensure_app_shape(item, backend.backend_id) for item in apps if isinstance(item, dict)]
+        self.refresh_category_buttons()
+        self.render_apps(selected_id=selected_id)
+        self.set_status(payload.get("message", "") or f"Loaded {len(self.all_apps)} app(s) from {backend.name}")
 
-        self.apps_listbox.delete(0, tk.END)
-        selected_idx = None
-        installed_count = 0
-        for idx, app in enumerate(self.filtered_apps):
-            if app.get("installed"):
-                installed_count += 1
-            prefix = "[Installed] " if app.get("installed") else ""
-            self.apps_listbox.insert(tk.END, f"{prefix}{app.get('name', app.get('id', '?'))}")
-            if selected_id and app.get("id") == selected_id:
-                selected_idx = idx
+    def catalog_paths(self) -> list[Path]:
+        paths = [SYSTEM_CATALOG_PATH]
+        if DEV_CATALOG_PATH is not None:
+            paths.append(DEV_CATALOG_PATH)
+        return paths
 
-        desc = backend.description or f"Source: {backend.name}"
-        self.count_label.configure(text=f"{len(self.filtered_apps)} shown  |  {installed_count} installed  |  {desc}")
+    def load_builtin_catalog(self, reason: str) -> None:
+        catalog_apps: list[dict] = []
+        for path in self.catalog_paths():
+            if not path.exists():
+                continue
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            raw_apps = payload.get("apps", [])
+            if isinstance(raw_apps, list):
+                catalog_apps = [ensure_app_shape(item, "bundled") for item in raw_apps if isinstance(item, dict)]
+                break
+        self.all_apps = catalog_apps
+        self.filtered_apps = []
+        self.refresh_category_buttons()
+        self.render_apps()
+        if catalog_apps:
+            self.set_status(f"{reason} Bundled catalog is available; install actions need the CRIXA backend.")
+        else:
+            self.set_status(f"{reason} No bundled catalog was found.")
 
-        if selected_idx is not None:
-            self.apps_listbox.selection_set(selected_idx)
+    def render_apps(self, selected_id: str | None = None) -> None:
+        query = self.search_var.get().strip().lower()
+        apps = self.apps_for_category(self.selected_category)
+        if query:
+            apps = [
+                app
+                for app in apps
+                if query
+                in " ".join(
+                    [
+                        app.get("id", ""),
+                        app.get("name", ""),
+                        app.get("category", ""),
+                        app.get("summary", ""),
+                        app.get("description", ""),
+                        " ".join(app.get("features", [])),
+                        " ".join(app.get("tags", [])),
+                    ]
+                ).lower()
+            ]
+        self.filtered_apps = sorted(apps, key=lambda row: (not row.get("installed"), row.get("name", "").lower()))
+        self.apps_tree.delete(*self.apps_tree.get_children())
+        installed_count = len([app for app in self.all_apps if app.get("installed")])
+        for app in self.filtered_apps:
+            marker = "✓" if app.get("installed") else ""
+            self.apps_tree.insert(
+                "",
+                "end",
+                iid=app.get("id", ""),
+                values=(marker, app.get("name", ""), app.get("category", ""), app.get("version", ""), app.get("size", "")),
+            )
+        self.count_label.configure(text=f"{len(self.filtered_apps)} shown  |  {installed_count} installed")
+        categories = len({app.get("category", "General") for app in self.all_apps})
+        self.hero_copy.configure(text=f"{self.selected_category} apps from the selected source. Search, install, launch, update, or remove packages.")
+        self.hero_stats.configure(text=f"{len(self.all_apps)} apps\n{categories} categories")
+        if selected_id and selected_id in [app.get("id") for app in self.filtered_apps]:
+            self.apps_tree.selection_set(selected_id)
+            self.apps_tree.focus(selected_id)
         elif self.filtered_apps:
-            self.apps_listbox.selection_set(0)
+            first_id = self.filtered_apps[0].get("id", "")
+            self.apps_tree.selection_set(first_id)
+            self.apps_tree.focus(first_id)
         self.on_select()
-
-        note = payload.get("message", "")
-        self.set_status(note or f"Loaded {len(self.filtered_apps)} app(s) from {backend.name}")
 
     def on_select(self) -> None:
         backend = self.selected_backend()
@@ -368,35 +544,31 @@ class CrixaStore(tk.Tk):
         if not app or backend is None:
             self.title_var.set("Select an app")
             self.meta_var.set("")
+            self.tag_line.configure(text="")
             self.update_details("")
-            self.install_btn.configure(state="disabled")
-            self.remove_btn.configure(state="disabled")
-            self.launch_btn.configure(state="disabled")
-            self.upgrade_btn.configure(state="disabled")
+            for button in (self.install_btn, self.remove_btn, self.launch_btn):
+                button.configure(state="disabled")
             return
-
         app_id = app.get("id", "")
         installed = bool(app.get("installed", False))
         self.title_var.set(app.get("name", app_id))
-        self.meta_var.set(
-            f"Version {app.get('version', 'n/a')}  |  {app.get('category', 'General')}  |  Source {backend.name}"
-        )
-
+        self.meta_var.set(f"{app.get('category', 'General')}  |  Version {app.get('version', 'n/a')}  |  {app.get('size', '')}")
+        tags = app.get("tags", [])
+        self.tag_line.configure(text="  ".join(f"#{tag}" for tag in tags[:8]))
         features = app.get("features", [])
-        feature_lines = "\n".join(f"  - {item}" for item in features) if features else "  - No feature list provided"
+        feature_lines = "\n".join(f"  * {item}" for item in features) if features else "  * No feature list provided"
         details = (
             f"{app.get('summary', '')}\n\n"
             f"{app.get('description', '')}\n\n"
-            f"Backend: {backend.backend_id}\n"
-            f"App ID: {app_id}\n\n"
-            f"Highlights:\n{feature_lines}"
+            f"Package: {app_id}\n"
+            f"Source: {backend.name}\n"
+            f"Entrypoint: {app.get('entrypoint', '') or 'n/a'}\n\n"
+            f"Highlights\n{feature_lines}"
         )
         self.update_details(details)
-
         self.install_btn.configure(text="Update" if installed else "Install", state="normal")
         self.remove_btn.configure(state="normal" if installed else "disabled")
         self.launch_btn.configure(state="normal" if installed else "disabled")
-        self.upgrade_btn.configure(state="normal" if backend.supports_upgrade else "disabled")
 
     def update_details(self, text: str) -> None:
         self.details_text.configure(state="normal")
@@ -409,25 +581,15 @@ class CrixaStore(tk.Tk):
         app = self.selected_app()
         if backend is None or app is None:
             return False, "No app selected"
-        timeout_sec = 300
-        if action in ("install", "remove"):
-            timeout_sec = 1800
-        elif action == "launch":
-            timeout_sec = 30
+        timeout_sec = 1800 if action in ("install", "remove") else 30
         ok, payload = self.call_backend(
             backend,
-            {
-                "action": action,
-                "app_id": app.get("id", ""),
-                "force": force,
-            },
+            {"action": action, "app_id": app.get("id", ""), "force": force},
             timeout_sec=timeout_sec,
         )
-        message = payload.get("message", "") if isinstance(payload, dict) else ""
         if ok:
-            return True, message or f"{action} completed"
-        err = payload.get("error", "backend action failed") if isinstance(payload, dict) else "backend action failed"
-        return False, err
+            return True, payload.get("message", "") or f"{action} completed"
+        return False, payload.get("error", "backend action failed")
 
     def install_selected(self) -> None:
         app = self.selected_app()
@@ -447,9 +609,7 @@ class CrixaStore(tk.Tk):
 
     def remove_selected(self) -> None:
         app = self.selected_app()
-        if not app:
-            return
-        if not app.get("installed"):
+        if not app or not app.get("installed"):
             return
         if not messagebox.askyesno("Remove App", f"Remove {app.get('name')}?"):
             return
@@ -467,12 +627,21 @@ class CrixaStore(tk.Tk):
             return
         self.set_status(msg)
 
+    def launch_or_install_selected(self) -> None:
+        app = self.selected_app()
+        if not app:
+            return
+        if app.get("installed"):
+            self.launch_selected()
+        else:
+            self.install_selected()
+
     def upgrade_selected_backend(self) -> None:
         backend = self.selected_backend()
         if backend is None:
             return
         if not backend.supports_upgrade:
-            messagebox.showinfo("CRIXA Store", "Selected backend does not support bulk upgrade.")
+            messagebox.showinfo("Foundry", "Selected backend does not support bulk upgrade.")
             return
         ok, payload = self.call_backend(backend, {"action": "upgrade"}, timeout_sec=3600)
         if not ok:
@@ -485,7 +654,7 @@ class CrixaStore(tk.Tk):
         path = USER_BACKEND_DIRS[-1]
         path.mkdir(parents=True, exist_ok=True)
         try:
-            subprocess.Popen(["thunar", str(path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.Popen(["crixa-files", str(path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except Exception:
             pass
 

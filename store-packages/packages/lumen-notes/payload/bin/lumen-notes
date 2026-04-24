@@ -43,8 +43,8 @@ class LumenNotes(tk.Tk):
             self.style.theme_use("clam")
         except tk.TclError:
             pass
-        self.style.configure(".", background="#0b1630", foreground="#dbeafe", font=("DejaVu Sans", 10))
-        self.style.configure("Header.TLabel", font=("DejaVu Sans", 15, "bold"))
+        self.style.configure(".", background="#0b1630", foreground="#dbeafe", font=("Helvetica", 10))
+        self.style.configure("Header.TLabel", font=("Helvetica", 15, "bold"))
         self.style.configure("Muted.TLabel", foreground="#90a6cc")
         self.style.configure("TButton", padding=(10, 6))
 
@@ -84,7 +84,7 @@ class LumenNotes(tk.Tk):
             relief="flat",
             highlightthickness=0,
             activestyle="none",
-            font=("DejaVu Sans", 10),
+            font=("Helvetica", 10),
         )
         self.note_list.grid(row=1, column=0, sticky="nsw", padx=6, pady=(0, 6))
         self.note_list.bind("<<ListboxSelect>>", lambda _e: self.on_select())
@@ -118,7 +118,7 @@ class LumenNotes(tk.Tk):
             highlightthickness=0,
             padx=10,
             pady=10,
-            font=("DejaVu Sans Mono", 10),
+            font=("Courier", 10),
         )
         self.editor.grid(row=2, column=0, sticky="nsew", padx=6, pady=(0, 6))
         self.editor.bind("<KeyRelease>", lambda _e: self.schedule_save())

@@ -9,6 +9,7 @@
       "summary": "A full personal notes workspace with search, tags, import, and export.",
       "description": "Lumen Notes is a full desktop notes app with persistent local storage, quick searching across titles and content, tag editing, auto-save, and file import/export workflows.",
       "entrypoint": "lumen-notes",
+      "tags": ["notes", "writing", "search"],
       "features": [
         "Create, duplicate, and delete notes",
         "Tag system and instant full-text filtering",
@@ -23,8 +24,9 @@
       "category": "Workflow",
       "size": "~92 KB",
       "summary": "A kanban-style planner with priorities, due dates, and board movement.",
-      "description": "Orbit Tasks provides a three-column workflow board (To Do, In Progress, Done), detailed task editor, priority and due date fields, and saved board state for ongoing project tracking.",
+      "description": "Orbit Tasks provides a three-column workflow board, detailed task editor, priority and due date fields, and saved board state for ongoing project tracking.",
       "entrypoint": "orbit-tasks",
+      "tags": ["tasks", "kanban", "planning"],
       "features": [
         "Kanban board with To Do / In Progress / Done lanes",
         "Priority and due date fields",
@@ -41,11 +43,114 @@
       "summary": "A full ffmpeg conversion studio for video, audio, and GIF output.",
       "description": "Media Lab wraps ffmpeg in a GUI with presets, optional clip trimming, live conversion log output, conversion progress tracking, and quick access to output folders.",
       "entrypoint": "media-lab",
+      "tags": ["ffmpeg", "audio", "video"],
       "features": [
         "Presets for MP4, WebM, MP3, and GIF",
         "Optional start time and duration clipping",
         "Live log and progress indicator",
         "Stop conversion and open output folder controls"
+      ]
+    },
+    {
+      "id": "focus-ring",
+      "name": "Focus Ring",
+      "version": "1.0.0",
+      "category": "Productivity",
+      "size": "~18 KB",
+      "summary": "A focused work timer with break modes and local session history.",
+      "description": "Focus Ring is a compact Pomodoro-style timer for CRIXA with focus, short break, and long break modes, adjustable durations, audible completion, and a saved history of recent sessions.",
+      "entrypoint": "focus-ring",
+      "tags": ["timer", "focus", "pomodoro"],
+      "features": [
+        "Focus, short break, and long break modes",
+        "Adjustable session length from one to 120 minutes",
+        "Recent session history saved locally",
+        "Pause, reset, and completion alert controls"
+      ]
+    },
+    {
+      "id": "prism-calc",
+      "name": "Prism Calc",
+      "version": "1.0.0",
+      "category": "Utilities",
+      "size": "~20 KB",
+      "summary": "A calculator and unit converter for everyday desktop work.",
+      "description": "Prism Calc combines a scientific expression calculator with quick converters for length, mass, and data units. It is useful for small calculations without opening a browser.",
+      "entrypoint": "prism-calc",
+      "tags": ["calculator", "converter", "math"],
+      "features": [
+        "Expression calculator with common math functions",
+        "Length, mass, and data conversion presets",
+        "Keyboard-friendly expression field",
+        "Clear result and conversion output areas"
+      ]
+    },
+    {
+      "id": "color-forge",
+      "name": "Color Forge",
+      "version": "1.0.0",
+      "category": "Design",
+      "size": "~17 KB",
+      "summary": "A palette generator for UI themes, CSS variables, and quick color exploration.",
+      "description": "Color Forge lets you pick a base color, generate a coordinated palette, inspect readable swatches, and copy the result as CSS custom properties.",
+      "entrypoint": "color-forge",
+      "tags": ["palette", "design", "css"],
+      "features": [
+        "Base color picker with generated tonal variants",
+        "Readable swatches with hex values",
+        "CSS custom property export",
+        "Clipboard copy for theme work"
+      ]
+    },
+    {
+      "id": "snippet-vault",
+      "name": "Snippet Vault",
+      "version": "1.0.0",
+      "category": "Development",
+      "size": "~28 KB",
+      "summary": "A searchable local library for commands, code snippets, and reusable text.",
+      "description": "Snippet Vault stores titled snippets with tags and body text in local JSON, supports quick search, and copies selected snippets to the clipboard.",
+      "entrypoint": "snippet-vault",
+      "tags": ["snippets", "code", "clipboard"],
+      "features": [
+        "Create, edit, delete, and tag snippets",
+        "Instant search across titles, tags, and body text",
+        "Copy snippet body to clipboard",
+        "Local JSON storage in the user's data directory"
+      ]
+    },
+    {
+      "id": "log-lens",
+      "name": "Log Lens",
+      "version": "1.0.0",
+      "category": "System",
+      "size": "~16 KB",
+      "summary": "A readable log viewer with open, reload, and fast filtering controls.",
+      "description": "Log Lens opens common Linux logs when available, supports loading arbitrary log files, and filters large recent log windows without needing a terminal.",
+      "entrypoint": "log-lens",
+      "tags": ["logs", "debugging", "system"],
+      "features": [
+        "Open common system logs automatically when present",
+        "Load arbitrary log files through a file picker",
+        "Filter log lines as you type",
+        "Reload the current log while investigating issues"
+      ]
+    },
+    {
+      "id": "archive-studio",
+      "name": "Archive Studio",
+      "version": "1.0.0",
+      "category": "Utilities",
+      "size": "~24 KB",
+      "summary": "Create ZIP/TAR.GZ archives and extract common archive formats.",
+      "description": "Archive Studio provides a simple GUI for selecting files or folders, producing compressed ZIP or TAR.GZ archives, and extracting archives to a selected destination.",
+      "entrypoint": "archive-studio",
+      "tags": ["archive", "zip", "files"],
+      "features": [
+        "Add individual files or whole folders",
+        "Create ZIP archives with deflate compression",
+        "Create TAR.GZ archives for Linux-friendly bundles",
+        "Extract ZIP and TAR-compatible archives"
       ]
     }
   ]

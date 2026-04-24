@@ -7,6 +7,7 @@ crixa-fetch: CRIXA OS system info card
 
 Usage:
   crixa-fetch [--no-color]
+  fastfetch
   neofetch
 EOF
 }
@@ -77,13 +78,109 @@ get_gpu() {
 get_resolution() {
   if [[ -n "${DISPLAY:-}" ]] && command -v xrandr >/dev/null 2>&1; then
     xrandr --current 2>/dev/null | awk '/\*/{print $1; exit}' || true
+    return 0
+  fi
+  if command -v kscreen-doctor >/dev/null 2>&1; then
+    kscreen-doctor -o 2>/dev/null | grep -oE '[0-9]+x[0-9]+@[0-9.]+\*[!]?' | head -n 1 | cut -d@ -f1 || true
   fi
   return 0
 }
 
+normalize_desktop_name() {
+  local raw="$1"
+  case "$raw" in
+    KDE|KDE\ Plasma|plasma|Plasma|plasmawayland|plasma.desktop|plasmawayland.desktop)
+      echo "Plasma"
+      ;;
+    "")
+      echo "n/a"
+      ;;
+    *)
+      echo "$raw"
+      ;;
+  esac
+}
+
+normalize_wm_name() {
+  local raw="$1"
+  case "$raw" in
+    KWin|KWin\ X11|KWin\ Wayland|kwin_x11|kwin_wayland)
+      echo "KWin"
+      ;;
+    "")
+      echo "n/a"
+      ;;
+    *)
+      echo "$raw"
+      ;;
+  esac
+}
+
+get_de() {
+  if [[ -n "${XDG_CURRENT_DESKTOP:-}" ]]; then
+    normalize_desktop_name "${XDG_CURRENT_DESKTOP%%:*}"
+    return
+  fi
+  if [[ -n "${XDG_SESSION_DESKTOP:-}" ]]; then
+    normalize_desktop_name "$XDG_SESSION_DESKTOP"
+    return
+  fi
+  echo "n/a"
+}
+
+get_wm() {
+  if command -v xprop >/dev/null 2>&1 && [[ -n "${DISPLAY:-}" ]]; then
+    local wm_id
+    wm_id="$(xprop -root _NET_SUPPORTING_WM_CHECK 2>/dev/null | awk -F' #' '/_NET_SUPPORTING_WM_CHECK/{print $2}' | tr -d ' ' || true)"
+    if [[ -n "$wm_id" ]]; then
+      local wm_name
+      wm_name="$(xprop -id "$wm_id" _NET_WM_NAME 2>/dev/null | sed -n 's/.*= "\(.*\)"/\1/p' || true)"
+      if [[ -n "$wm_name" ]]; then
+        normalize_wm_name "$wm_name"
+        return
+      fi
+    fi
+  fi
+  if pgrep -x kwin_x11 >/dev/null 2>&1 || pgrep -x kwin_wayland >/dev/null 2>&1; then
+    normalize_wm_name "kwin_x11"
+    return
+  fi
+  echo "n/a"
+}
+
+get_session_type() {
+  case "${XDG_SESSION_TYPE:-}" in
+    x11)
+      echo "X11"
+      ;;
+    wayland)
+      echo "Wayland"
+      ;;
+    "")
+      if [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
+        echo "Wayland"
+      elif [[ -n "${DISPLAY:-}" ]]; then
+        echo "X11"
+      else
+        echo "n/a"
+      fi
+      ;;
+    *)
+      echo "${XDG_SESSION_TYPE}"
+      ;;
+  esac
+}
+
 get_theme() {
   local theme=""
-  if [[ -f "$HOME/.config/gtk-3.0/settings.ini" ]]; then
+  local config_cmd
+  for config_cmd in kreadconfig6 kreadconfig5 kreadconfig; do
+    if command -v "$config_cmd" >/dev/null 2>&1; then
+      theme="$("$config_cmd" --file kdeglobals --group General --key ColorScheme 2>/dev/null || true)"
+      [[ -n "$theme" ]] && break
+    fi
+  done
+  if [[ -z "$theme" && -f "$HOME/.config/gtk-3.0/settings.ini" ]]; then
     theme="$(awk -F= '/^gtk-theme-name=/{print $2; exit}' "$HOME/.config/gtk-3.0/settings.ini" 2>/dev/null || true)"
   fi
   if [[ -z "$theme" && -f "/etc/skel/.config/gtk-3.0/settings.ini" ]]; then
@@ -111,7 +208,9 @@ UPTIME_VALUE="$(get_uptime)"
 PACKAGES_VALUE="$(get_packages)"
 SHELL_VALUE="$(basename "${SHELL:-bash}")"
 RESOLUTION_VALUE="$(get_resolution)"
-WM_VALUE="${XDG_CURRENT_DESKTOP:-Openbox}"
+DE_VALUE="$(get_de)"
+WM_VALUE="$(get_wm)"
+SESSION_VALUE="$(get_session_type)"
 THEME_VALUE="$(get_theme)"
 CPU_VALUE="$(get_cpu || true)"
 GPU_VALUE="$(get_gpu || true)"
@@ -147,7 +246,9 @@ INFO_LINES=(
   "$(kv "Packages" "$PACKAGES_VALUE")"
   "$(kv "Shell" "$SHELL_VALUE")"
   "$(kv "Resolution" "$RESOLUTION_VALUE")"
+  "$(kv "DE" "$DE_VALUE")"
   "$(kv "WM" "$WM_VALUE")"
+  "$(kv "Session" "$SESSION_VALUE")"
   "$(kv "Theme" "$THEME_VALUE")"
   "$(kv "CPU" "$CPU_VALUE")"
   "$(kv "GPU" "$GPU_VALUE")"

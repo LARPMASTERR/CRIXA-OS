@@ -67,7 +67,7 @@ def is_virtualized() -> bool:
 class CrixaControlCenter(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
-        self.title("CRIXA Control Center")
+        self.title("Bridge")
         self.geometry("1180x760")
         self.minsize(980, 640)
         self.configure(bg="#081326")
@@ -133,7 +133,7 @@ class CrixaControlCenter(tk.Tk):
         header = ttk.Frame(self, style="Surface.TFrame")
         header.grid(row=0, column=0, columnspan=2, sticky="nsew")
         header.grid_columnconfigure(0, weight=1)
-        ttk.Label(header, text="CRIXA Control Center", style="Header.TLabel").grid(row=0, column=0, sticky="w", padx=20, pady=(14, 2))
+        ttk.Label(header, text="Bridge", style="Header.TLabel").grid(row=0, column=0, sticky="w", padx=20, pady=(14, 2))
         ttk.Label(
             header,
             text="Visuals, system toggles, startup behavior, and app launch tools",
@@ -381,7 +381,7 @@ class CrixaControlCenter(tk.Tk):
             self.set_status("Failed to change wallpaper", warning=True)
 
     def open_path(self, path: str) -> None:
-        subprocess.Popen(["thunar", path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.Popen(["crixa-files", path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     def launch(self, cmd: list[str]) -> None:
         subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

@@ -1,10 +1,10 @@
 [Desktop Entry]
 Type=Application
 Version=1.0
-Name=CRIXA Wayland Track
-Comment=Toggle CRIXA session mode between stable X11 and Wayland preview
+Name=Session Lab
+Comment=Choose the default Plasma session between X11 and Wayland
 Exec=crixa-wayland-control
-Icon=crixa-wayland-control
+Icon=video-display
 Terminal=false
 Categories=System;Settings;
 StartupNotify=true

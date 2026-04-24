@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Log Lens
+Comment=Readable log viewer with live filtering
+Exec=log-lens
+Icon=log-lens
+Categories=System;Utility;
+Terminal=false

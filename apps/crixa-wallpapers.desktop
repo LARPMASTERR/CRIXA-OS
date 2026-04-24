@@ -1,10 +1,10 @@
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=CRIXA Wallpapers
-Comment=Browse and switch wallpapers
+Name=Backdrop
+Comment=Browse and switch installed wallpapers
 Exec=crixa-files /usr/share/backgrounds/crixa
-Icon=crixa-wallpapers
+Icon=preferences-desktop-wallpaper
 Terminal=false
 Categories=Graphics;Utility;
 StartupNotify=false

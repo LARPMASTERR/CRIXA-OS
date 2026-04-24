@@ -1,0 +1,13 @@
+[Icon Theme]
+Name=CRIXA Depth
+Comment=CRIXA icon theme layered over Papirus
+Inherits=Papirus-Dark,breeze,hicolor
+Directories=scalable/apps
+Example=crixa-launcher
+
+[scalable/apps]
+Size=64
+MinSize=16
+MaxSize=512
+Context=Applications
+Type=Scalable

@@ -7,7 +7,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CATALOG_PATH="$PROJECT_ROOT/store-packages/catalog.json"
 SYSTEM_ROLLOUTS_PATH="$PROJECT_ROOT/store-packages/system-rollouts.json"
 SRC_PACKAGES_DIR="$PROJECT_ROOT/store-packages/packages"
-REPO_ROOT="$PROJECT_ROOT/crixa-repo"
+REPO_ROOT="${REPO_ROOT:-$PROJECT_ROOT/crixa-repo}"
 REPO_PACKAGES_DIR="$REPO_ROOT/packages"
 REPO_METADATA_DIR="$REPO_ROOT/metadata"
 REPO_KEYS_DIR="$REPO_ROOT/keys"
@@ -116,6 +116,7 @@ for app in apps:
         "summary": app.get("summary", ""),
         "description": app.get("description", ""),
         "features": app.get("features", []),
+        "tags": app.get("tags", []),
         "payload_schema": "v1",
     }
 
@@ -148,6 +149,7 @@ for app in apps:
             "description": app.get("description", ""),
             "entrypoint": app.get("entrypoint", ""),
             "features": app.get("features", []),
+            "tags": app.get("tags", []),
             "filename": pkg_filename,
             "size_bytes": pkg_path.stat().st_size,
             "sha256": sha256sum(pkg_path),

@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-if command -v python3 >/dev/null 2>&1; then
-  exec python3 /usr/local/bin/crixa-store.py "$@"
-fi
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-exit 1
+for candidate in \
+  "$SCRIPT_DIR/crixa-store.py" \
+  "/usr/local/bin/crixa-store.py" \
+  "$(pwd)/apps/crixa-store.py"; do
+  if [[ -f "$candidate" ]] && command -v python3 >/dev/null 2>&1; then
+    exec python3 "$candidate" "$@"
+  fi
+done
+
+printf 'Foundry could not locate crixa-store.py or python3.\n' >&2
+exit 127

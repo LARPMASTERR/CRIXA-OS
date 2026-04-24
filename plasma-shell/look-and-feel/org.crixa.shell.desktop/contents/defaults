@@ -1,0 +1,37 @@
+[kdeglobals][General]
+ColorScheme=CrixaShell
+font=IBM Plex Sans,10,-1,5,50,0,0,0,0,0
+fixed=IBM Plex Mono,10,-1,5,50,0,0,0,0,0
+menuFont=IBM Plex Sans,10,-1,5,50,0,0,0,0,0
+smallestReadableFont=IBM Plex Sans,9,-1,5,50,0,0,0,0,0
+toolBarFont=IBM Plex Sans,10,-1,5,50,0,0,0,0,0
+
+[kdeglobals][Icons]
+Theme=CRIXA-Depth
+
+[kdeglobals][KDE]
+SingleClick=false
+widgetStyle=Breeze
+
+[plasmarc][Theme]
+name=crixa-material
+
+[Wallpaper]
+Image=/usr/share/backgrounds/crixa/00-defaultwp.jpg
+
+[kcminputrc][Mouse]
+cursorTheme=breeze_cursors
+
+[kwinrc][WindowSwitcher]
+LayoutName=org.kde.breeze.desktop
+
+[kwinrc][DesktopSwitcher]
+LayoutName=org.kde.breeze.desktop
+
+[kwinrc][org.kde.kdecoration2]
+NoPlugin=false
+library=org.kde.breeze
+theme=Breeze
+
+[KSplash]
+Theme=org.kde.Breeze

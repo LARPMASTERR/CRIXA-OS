@@ -3,12 +3,15 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 CATALOG_PATH = Path("/usr/share/crixa-store/catalog.json")
 LOCAL_PREFIX = Path.home() / ".local"
+DEV_ROOT = Path(__file__).resolve().parents[1] if Path(__file__).resolve().parent.name == "store-backends" else None
+DEV_CATALOG_PATH = DEV_ROOT / "store-packages" / "catalog.json" if DEV_ROOT else None
 
 
 def respond(payload: dict, code: int = 0) -> None:
@@ -29,13 +32,26 @@ def load_request() -> dict:
     return req
 
 
-def run_cmd(args: list[str]) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(args, capture_output=True, text=True, check=False)
+def run_cmd(args: list[str], timeout: int = 30) -> subprocess.CompletedProcess[str]:
+    command = list(args)
+    if command and command[0] == "crixapkg" and shutil.which("crixapkg") is None and DEV_ROOT is not None:
+        local_pkg = DEV_ROOT / "apps" / "crixapkg.py"
+        if local_pkg.exists():
+            command = [sys.executable, str(local_pkg), *command[1:]]
+    try:
+        return subprocess.run(command, capture_output=True, text=True, check=False, timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        return subprocess.CompletedProcess(command, 124, exc.stdout or "", exc.stderr or "command timed out")
+    except FileNotFoundError as exc:
+        return subprocess.CompletedProcess(command, 127, "", str(exc))
 
 
 def load_catalog() -> list[dict]:
+    catalog_path = CATALOG_PATH
+    if not catalog_path.exists() and DEV_CATALOG_PATH is not None and DEV_CATALOG_PATH.exists():
+        catalog_path = DEV_CATALOG_PATH
     try:
-        data = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
+        data = json.loads(catalog_path.read_text(encoding="utf-8"))
     except Exception:
         return []
     apps = data.get("apps", [])
@@ -92,6 +108,7 @@ def list_apps(query: str, limit: int) -> list[dict]:
             "summary": str(item.get("summary", "")),
             "description": str(item.get("description", "")),
             "features": item.get("features", []) if isinstance(item.get("features"), list) else [],
+            "tags": item.get("tags", []) if isinstance(item.get("tags"), list) else [],
             "entrypoint": str(item.get("entrypoint", "")),
             "size": str(item.get("size", "")),
             "installed": app_id in installed,

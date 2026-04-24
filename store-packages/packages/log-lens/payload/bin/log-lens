@@ -1,0 +1,78 @@
+#!/usr/bin/env python3
+from pathlib import Path
+import tkinter as tk
+from tkinter import filedialog, ttk
+
+LOG_PATHS = [Path("/var/log/syslog"), Path("/var/log/messages"), Path("/var/log/dpkg.log"), Path.home() / ".xsession-errors"]
+
+
+class LogLens(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("Log Lens")
+        self.geometry("920x620")
+        self.configure(bg="#14171b")
+        self.path = tk.StringVar()
+        self.query = tk.StringVar()
+        self.query.trace_add("write", lambda *_: self.render())
+        self.lines = []
+        self._style()
+        self._ui()
+        self.load_first()
+
+    def _style(self):
+        self.style = ttk.Style(self)
+        try:
+            self.style.theme_use("clam")
+        except tk.TclError:
+            pass
+        self.style.configure(".", background="#14171b", foreground="#edf5f2", font=("Helvetica", 10))
+        self.style.configure("TButton", padding=(10, 7))
+
+    def _ui(self):
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(2, weight=1)
+        top = ttk.Frame(self)
+        top.grid(row=0, column=0, sticky="ew", padx=14, pady=14)
+        top.grid_columnconfigure(2, weight=1)
+        ttk.Label(top, text="Log Lens", font=("Helvetica", 18, "bold")).grid(row=0, column=0, padx=(0, 10))
+        ttk.Button(top, text="Open", command=self.open_file).grid(row=0, column=1, padx=4)
+        ttk.Entry(top, textvariable=self.query).grid(row=0, column=2, sticky="ew", padx=8)
+        ttk.Button(top, text="Reload", command=self.reload).grid(row=0, column=3, padx=4)
+        ttk.Label(self, textvariable=self.path).grid(row=1, column=0, sticky="w", padx=18)
+        self.text = tk.Text(self, bg="#0f1216", fg="#edf5f2", insertbackground="#edf5f2", relief="flat", wrap="none", padx=10, pady=10, font=("Courier", 10))
+        self.text.grid(row=2, column=0, sticky="nsew", padx=14, pady=14)
+
+    def load_first(self):
+        for path in LOG_PATHS:
+            if path.exists():
+                self.load(path)
+                return
+        self.path.set("No common logs found. Use Open.")
+
+    def open_file(self):
+        name = filedialog.askopenfilename(title="Open log")
+        if name:
+            self.load(Path(name))
+
+    def reload(self):
+        if self.path.get():
+            self.load(Path(self.path.get()))
+
+    def load(self, path):
+        self.path.set(str(path))
+        try:
+            self.lines = path.read_text(errors="replace").splitlines()[-3000:]
+        except Exception as exc:
+            self.lines = [f"Unable to read {path}: {exc}"]
+        self.render()
+
+    def render(self):
+        q = self.query.get().lower()
+        rows = [line for line in self.lines if not q or q in line.lower()]
+        self.text.delete("1.0", tk.END)
+        self.text.insert("1.0", "\n".join(rows[-1500:]))
+
+
+if __name__ == "__main__":
+    LogLens().mainloop()

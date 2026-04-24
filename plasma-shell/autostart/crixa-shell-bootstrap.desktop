@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=CRIXA Shell Bootstrap
+Comment=Apply the CRIXA shell layout on first login
+Exec=crixa-shell-bootstrap
+OnlyShowIn=KDE;
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+X-KDE-autostart-phase=2

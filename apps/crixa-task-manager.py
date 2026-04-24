@@ -183,7 +183,7 @@ def run_tui() -> int:
             width = shutil.get_terminal_size((120, 40)).columns
             bar_w = max(20, min(42, width - 30))
 
-            print("CRIXA Task Manager")
+            print("Pulse")
             print("=" * min(width, 80))
             for line in chassis_info:
                 print(line)
@@ -227,7 +227,7 @@ def run_tui() -> int:
 class TaskManagerGUI(tk.Tk):  # type: ignore[misc]
     def __init__(self) -> None:
         super().__init__()
-        self.title("CRIXA Task Manager")
+        self.title("Pulse")
         self.geometry("980x640")
         self.minsize(840, 520)
         self.configure(bg="#081326")
@@ -274,7 +274,7 @@ class TaskManagerGUI(tk.Tk):  # type: ignore[misc]
         header = ttk.Frame(root)
         header.grid(row=0, column=0, sticky="ew")
         header.columnconfigure(0, weight=1)
-        ttk.Label(header, text="CRIXA Task Manager", font=("DejaVu Sans", 15, "bold")).grid(row=0, column=0, sticky="w")
+        ttk.Label(header, text="Pulse", font=("DejaVu Sans", 15, "bold")).grid(row=0, column=0, sticky="w")
         self.subtitle = ttk.Label(header, style="Muted.TLabel")
         self.subtitle.grid(row=1, column=0, sticky="w", pady=(2, 0))
         self.sort_btn = ttk.Button(header, text="Sort: CPU", command=self.toggle_sort)
@@ -410,8 +410,8 @@ class TaskManagerGUI(tk.Tk):  # type: ignore[misc]
 def spawn_terminal_tui() -> bool:
     script = "/usr/local/bin/crixa-task-manager.py"
     candidates = [
-        ["xterm", "-fa", "DejaVu Sans Mono", "-fs", "10", "-bg", "#0b1220", "-fg", "#dbeafe", "-title", "CRIXA Task Manager", "-e", "python3", script, "--tui"],
-        ["alacritty", "--title", "CRIXA Task Manager", "-e", "python3", script, "--tui"],
+        ["xterm", "-fa", "DejaVu Sans Mono", "-fs", "10", "-bg", "#0b1220", "-fg", "#dbeafe", "-title", "Pulse", "-e", "python3", script, "--tui"],
+        ["alacritty", "--title", "Pulse", "-e", "python3", script, "--tui"],
     ]
     for cmd in candidates:
         if shutil.which(cmd[0]):
@@ -429,7 +429,7 @@ def run_gui() -> int:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="CRIXA Task Manager")
+    parser = argparse.ArgumentParser(description="Pulse")
     parser.add_argument("--tui", action="store_true", help="force terminal mode")
     return parser.parse_args()
 
@@ -450,7 +450,7 @@ def main() -> int:
     if display_ready and spawn_terminal_tui():
         return 0
 
-    print("Unable to start CRIXA Task Manager.", file=sys.stderr)
+    print("Unable to start Pulse.", file=sys.stderr)
     return 1
 
 

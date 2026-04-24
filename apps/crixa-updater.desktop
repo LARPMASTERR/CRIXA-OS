@@ -1,10 +1,10 @@
 [Desktop Entry]
 Type=Application
 Version=1.0
-Name=CRIXA Updater
-Comment=Atomic updater with rollback snapshots and channel rollout controls
+Name=Transit
+Comment=Atomic updates, snapshots, and release channels
 Exec=crixa-updater
-Icon=crixa-updater
+Icon=system-software-update
 Terminal=false
 Categories=System;Settings;
 StartupNotify=true

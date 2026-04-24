@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Archive Studio
+Comment=Create and extract ZIP or TAR.GZ archives
+Exec=archive-studio
+Icon=archive-studio
+Categories=Utility;FileTools;
+Terminal=false

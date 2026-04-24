@@ -1,10 +1,10 @@
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=CRIXA Files
-Comment=Open file manager
+Name=Hangar
+Comment=File workspace powered by Dolphin
 Exec=crixa-files
-Icon=crixa-files
+Icon=system-file-manager
 Terminal=false
 Categories=System;FileManager;
 StartupNotify=false

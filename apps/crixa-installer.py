@@ -19,7 +19,7 @@ def run_cmd(args: list[str]) -> subprocess.CompletedProcess[str]:
 class CrixaInstaller(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
-        self.title("CRIXA Installer")
+        self.title("Dockyard")
         self.geometry("980x700")
         self.minsize(860, 620)
         self.configure(bg="#09152a")
@@ -53,7 +53,7 @@ class CrixaInstaller(tk.Tk):
 
         header = ttk.Label(
             root,
-            text="CRIXA Disk Installer",
+            text="Dockyard",
             font=("DejaVu Sans", 16, "bold"),
         )
         header.pack(anchor="w", pady=(0, 6))
@@ -105,7 +105,7 @@ class CrixaInstaller(tk.Tk):
             pady=10,
         )
         self.log_text.pack(fill="both", expand=True, padx=8, pady=8)
-        self.log_text.insert("end", "CRIXA installer ready.\n")
+        self.log_text.insert("end", "Dockyard ready.\n")
         self.log_text.configure(state="disabled")
 
     def append_log(self, line: str) -> None:
@@ -195,7 +195,7 @@ class CrixaInstaller(tk.Tk):
             cmd.extend(["--user-password", password])
 
         self.install_btn.configure(state="disabled")
-        self.status_var.set(f"Installing CRIXA to {target} ...")
+        self.status_var.set(f"Dockyard is installing to {target} ...")
         self.append_log(f"\n$ {' '.join(cmd)}\n")
 
         self.worker = threading.Thread(target=self._run_installer, args=(cmd,), daemon=True)
@@ -239,7 +239,7 @@ class CrixaInstaller(tk.Tk):
     def open_log(self) -> None:
         log_path = Path("/var/log/crixa-installer.log")
         if log_path.exists():
-            subprocess.Popen(["thunar", str(log_path.parent)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.Popen(["crixa-files", str(log_path.parent)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         else:
             messagebox.showinfo("Log Not Found", "Installer log has not been created yet.")
 

@@ -1,0 +1,79 @@
+#!/usr/bin/env python3
+import colorsys
+import tkinter as tk
+from tkinter import colorchooser, ttk
+
+
+class ColorForge(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("Color Forge")
+        self.geometry("680x460")
+        self.configure(bg="#151719")
+        self.base = "#32c7b8"
+        self.palette = []
+        self._style()
+        self._ui()
+        self.generate()
+
+    def _style(self):
+        self.style = ttk.Style(self)
+        try:
+            self.style.theme_use("clam")
+        except tk.TclError:
+            pass
+        self.style.configure(".", background="#151719", foreground="#edf5f2", font=("Helvetica", 10))
+        self.style.configure("TButton", padding=(10, 7))
+
+    def _ui(self):
+        self.grid_columnconfigure(0, weight=1)
+        ttk.Label(self, text="Color Forge", font=("Helvetica", 19, "bold")).grid(row=0, column=0, sticky="w", padx=18, pady=(18, 8))
+        top = ttk.Frame(self)
+        top.grid(row=1, column=0, sticky="ew", padx=18)
+        ttk.Button(top, text="Pick Base", command=self.pick).pack(side="left")
+        ttk.Button(top, text="Copy CSS", command=self.copy_css).pack(side="left", padx=8)
+        self.base_label = tk.Label(top, text=self.base, bg="#151719", fg="#f2b84b", font=("Courier", 11, "bold"))
+        self.base_label.pack(side="left", padx=10)
+        self.swatches = ttk.Frame(self)
+        self.swatches.grid(row=2, column=0, sticky="nsew", padx=18, pady=18)
+        self.output = tk.Text(self, bg="#0f1216", fg="#edf5f2", relief="flat", height=8, padx=10, pady=10)
+        self.output.grid(row=3, column=0, sticky="nsew", padx=18, pady=(0, 18))
+        self.grid_rowconfigure(2, weight=1)
+
+    def pick(self):
+        _rgb, hex_color = colorchooser.askcolor(color=self.base, parent=self)
+        if hex_color:
+            self.base = hex_color
+            self.generate()
+
+    def generate(self):
+        for child in self.swatches.winfo_children():
+            child.destroy()
+        r, g, b = [int(self.base[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+        h, s, v = colorsys.rgb_to_hsv(r, g, b)
+        variants = []
+        for offset in (-0.08, -0.04, 0, 0.04, 0.08):
+            for value in (0.35, 0.55, 0.78, 0.95):
+                rgb = colorsys.hsv_to_rgb((h + offset) % 1, min(1, s * 1.05), value)
+                variants.append("#" + "".join(f"{int(c * 255):02x}" for c in rgb))
+        self.palette = variants
+        self.base_label.configure(text=self.base)
+        for idx, color in enumerate(variants):
+            frame = tk.Frame(self.swatches, bg=color, width=116, height=54)
+            frame.grid(row=idx // 5, column=idx % 5, padx=6, pady=6, sticky="nsew")
+            frame.grid_propagate(False)
+            tk.Label(frame, text=color, bg=color, fg=self.text_for(color), font=("Courier", 9, "bold")).place(relx=0.5, rely=0.5, anchor="center")
+        self.output.delete("1.0", tk.END)
+        self.output.insert("1.0", "\n".join(f"--crixa-color-{i + 1}: {c};" for i, c in enumerate(self.palette)))
+
+    def text_for(self, color):
+        r, g, b = [int(color[i:i + 2], 16) for i in (1, 3, 5)]
+        return "#111418" if (r * 299 + g * 587 + b * 114) / 1000 > 145 else "#ffffff"
+
+    def copy_css(self):
+        self.clipboard_clear()
+        self.clipboard_append(self.output.get("1.0", "end-1c"))
+
+
+if __name__ == "__main__":
+    ColorForge().mainloop()

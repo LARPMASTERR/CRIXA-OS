@@ -1,10 +1,10 @@
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=CRIXA Browser
-Comment=Browse the web with Firefox ESR
+Name=Navigator
+Comment=Web workspace powered by Firefox ESR
 Exec=crixa-browser
-Icon=crixa-browser
+Icon=firefox-esr
 Terminal=false
 Categories=Network;WebBrowser;
 StartupNotify=false

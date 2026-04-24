@@ -6,6 +6,6 @@ Comment=CRIXA OS visual theme
 [X-GNOME-Metatheme]
 GtkTheme=CRIXA
 MetacityTheme=CRIXA
-IconTheme=hicolor
-CursorTheme=Adwaita
+IconTheme=CRIXA-Depth
+CursorTheme=breeze_cursors
 ButtonLayout=menu:minimize,maximize,close

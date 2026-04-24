@@ -1,0 +1,123 @@
+#!/usr/bin/env python3
+import tarfile
+import zipfile
+from pathlib import Path
+import tkinter as tk
+from tkinter import filedialog, messagebox, ttk
+
+
+class ArchiveStudio(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("Archive Studio")
+        self.geometry("740x520")
+        self.configure(bg="#14171b")
+        self.files = []
+        self.status = tk.StringVar(value="Ready")
+        self._style()
+        self._ui()
+
+    def _style(self):
+        self.style = ttk.Style(self)
+        try:
+            self.style.theme_use("clam")
+        except tk.TclError:
+            pass
+        self.style.configure(".", background="#14171b", foreground="#edf5f2", font=("Helvetica", 10))
+        self.style.configure("TButton", padding=(10, 7))
+        self.style.configure("Muted.TLabel", foreground="#98a6a2")
+
+    def _ui(self):
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(1, weight=1)
+        top = ttk.Frame(self)
+        top.grid(row=0, column=0, sticky="ew", padx=14, pady=14)
+        ttk.Label(top, text="Archive Studio", font=("Helvetica", 18, "bold")).pack(side="left", padx=(0, 12))
+        ttk.Button(top, text="Add Files", command=self.add_files).pack(side="left", padx=4)
+        ttk.Button(top, text="Add Folder", command=self.add_folder).pack(side="left", padx=4)
+        ttk.Button(top, text="Clear", command=self.clear).pack(side="left", padx=4)
+        self.listbox = tk.Listbox(self, bg="#0f1216", fg="#edf5f2", selectbackground="#1a7f78", relief="flat")
+        self.listbox.grid(row=1, column=0, sticky="nsew", padx=14, pady=(0, 12))
+        actions = ttk.Frame(self)
+        actions.grid(row=2, column=0, sticky="ew", padx=14, pady=(0, 10))
+        ttk.Button(actions, text="Create ZIP", command=lambda: self.create("zip")).pack(side="left", padx=4)
+        ttk.Button(actions, text="Create TAR.GZ", command=lambda: self.create("tar")).pack(side="left", padx=4)
+        ttk.Button(actions, text="Extract Archive", command=self.extract).pack(side="left", padx=4)
+        ttk.Label(self, textvariable=self.status, style="Muted.TLabel").grid(row=3, column=0, sticky="ew", padx=18, pady=(0, 12))
+
+    def refresh(self):
+        self.listbox.delete(0, tk.END)
+        for path in self.files:
+            self.listbox.insert(tk.END, str(path))
+        self.status.set(f"{len(self.files)} item(s) selected")
+
+    def add_files(self):
+        for name in filedialog.askopenfilenames():
+            path = Path(name)
+            if path not in self.files:
+                self.files.append(path)
+        self.refresh()
+
+    def add_folder(self):
+        name = filedialog.askdirectory()
+        if name:
+            path = Path(name)
+            if path not in self.files:
+                self.files.append(path)
+        self.refresh()
+
+    def clear(self):
+        self.files = []
+        self.refresh()
+
+    def create(self, kind):
+        if not self.files:
+            messagebox.showinfo("Archive Studio", "Add files or folders first.")
+            return
+        suffix = ".zip" if kind == "zip" else ".tar.gz"
+        target = filedialog.asksaveasfilename(defaultextension=suffix)
+        if not target:
+            return
+        target_path = Path(target)
+        try:
+            if kind == "zip":
+                with zipfile.ZipFile(target_path, "w", zipfile.ZIP_DEFLATED) as archive:
+                    for path in self.files:
+                        if path.is_dir():
+                            for item in path.rglob("*"):
+                                if item.is_file():
+                                    archive.write(item, item.relative_to(path.parent))
+                        else:
+                            archive.write(path, path.name)
+            else:
+                with tarfile.open(target_path, "w:gz") as archive:
+                    for path in self.files:
+                        archive.add(path, arcname=path.name)
+        except Exception as exc:
+            messagebox.showerror("Archive Failed", str(exc))
+            return
+        self.status.set(f"Created {target_path}")
+
+    def extract(self):
+        archive_name = filedialog.askopenfilename(title="Select archive")
+        if not archive_name:
+            return
+        dest = filedialog.askdirectory(title="Extract to")
+        if not dest:
+            return
+        path = Path(archive_name)
+        try:
+            if zipfile.is_zipfile(path):
+                with zipfile.ZipFile(path) as archive:
+                    archive.extractall(dest)
+            else:
+                with tarfile.open(path) as archive:
+                    archive.extractall(dest)
+        except Exception as exc:
+            messagebox.showerror("Extract Failed", str(exc))
+            return
+        self.status.set(f"Extracted to {dest}")
+
+
+if __name__ == "__main__":
+    ArchiveStudio().mainloop()

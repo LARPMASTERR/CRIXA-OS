@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+is_wsl() {
+  grep -qiE "(microsoft|wsl)" /proc/version /proc/sys/kernel/osrelease 2>/dev/null
+}
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [[ "${1:-}" == "--headless" ]]; then
@@ -8,8 +12,13 @@ if [[ "${1:-}" == "--headless" ]]; then
 fi
 
 if [[ "$(id -u)" -eq 0 ]]; then
-  echo "Running QEMU GUI as root in WSLg can trigger GDK seat warnings."
-  echo "Use a normal user for GUI mode when possible."
+  if is_wsl; then
+    echo "Running QEMU GUI as root in WSLg can trigger GDK seat warnings."
+    echo "Use a normal user for GUI mode when possible."
+  else
+    echo "Running the GUI VM as root is not recommended."
+    echo "Use a normal user for GUI mode when possible."
+  fi
 fi
 
 if [[ -e /dev/kvm && ( ! -r /dev/kvm || ! -w /dev/kvm ) ]]; then
@@ -19,7 +28,11 @@ if [[ -e /dev/kvm && ( ! -r /dev/kvm || ! -w /dev/kvm ) ]]; then
 fi
 
 if [[ ! -e /dev/kvm ]]; then
-  echo "Warning: /dev/kvm is not present in this WSL session."
+  if is_wsl; then
+    echo "Warning: /dev/kvm is not present in this WSL session."
+  else
+    echo "Warning: /dev/kvm is not present on this host."
+  fi
   echo "QEMU will use software emulation (TCG), which can cause low FPS and input delay."
 fi
 

@@ -59,7 +59,7 @@ trap cleanup_mounts EXIT
 require_root() {
   if [[ "$EUID" -ne 0 ]]; then
     echo "This script must run as root. Example:"
-    echo "  wsl -u root bash -lc 'cd /mnt/c/Users/[USER]/Desktop/OS3 && ./build/build.sh'"
+    echo "  cd $PROJECT_ROOT && sudo ./build/build.sh"
     exit 1
   fi
 }
@@ -73,23 +73,68 @@ require_file() {
 }
 
 install_host_dependencies() {
-  log "Installing host build dependencies"
-  export DEBIAN_FRONTEND=noninteractive
-  apt-get update
-  apt-get install -y --no-install-recommends \
-    ca-certificates \
-    debian-archive-keyring \
-    debootstrap \
-    openssl \
-    grub-common \
-    grub-pc-bin \
-    grub-efi-amd64-bin \
-    grub2-common \
-    mtools \
-    dosfstools \
-    rsync \
-    squashfs-tools \
+  local required_commands=(
+    debootstrap
+    grub-mkimage
+    grub-mkstandalone
+    mksquashfs
     xorriso
+    rsync
+    mmd
+    mkfs.vfat
+    openssl
+  )
+  local missing_commands=()
+  local cmd
+
+  for cmd in "${required_commands[@]}"; do
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+      missing_commands+=("$cmd")
+    fi
+  done
+
+  if command -v apt-get >/dev/null 2>&1 && command -v dpkg-query >/dev/null 2>&1; then
+    log "Installing host build dependencies"
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update
+    apt-get install -y --no-install-recommends \
+      ca-certificates \
+      debian-archive-keyring \
+      debootstrap \
+      openssl \
+      grub-common \
+      grub-pc-bin \
+      grub-efi-amd64-bin \
+      grub2-common \
+      mtools \
+      dosfstools \
+      rsync \
+      squashfs-tools \
+      xorriso
+    return
+  fi
+
+  if [[ "${#missing_commands[@]}" -eq 0 ]]; then
+    log "Host build dependencies already available; skipping package-manager install step"
+    return
+  fi
+
+  echo "Missing host commands: ${missing_commands[*]}"
+  if command -v pacman >/dev/null 2>&1; then
+    cat <<'EOF'
+This host does not provide apt-get, so install the build tools with pacman first:
+  sudo pacman -S --needed debootstrap grub mtools dosfstools squashfs-tools libisoburn rsync openssl
+
+Optional but helpful for Debian package inspection on Arch:
+  sudo pacman -S --needed dpkg
+EOF
+  else
+    cat <<'EOF'
+This host does not provide apt-get. Install the missing commands with your system package manager,
+then rerun the build.
+EOF
+  fi
+  exit 1
 }
 
 reset_workspace() {
@@ -140,36 +185,43 @@ apt-get install -y --no-install-recommends \
   systemd-sysv \
   locales \
   ca-certificates \
-  dbus-x11 \
+  dbus-user-session \
   xorg \
-  xinit \
-  lightdm \
-  lightdm-gtk-greeter \
-  openbox \
-  tint2 \
-  rofi \
+  sddm \
+  kde-plasma-desktop \
+  plasma-nm \
+  plasma-pa \
+  dolphin \
+  konsole \
+  systemsettings \
+  kde-cli-tools \
+  kde-config-sddm \
+  kio-extras \
+  breeze-gtk-theme \
+  sddm-theme-breeze \
+  kwin-x11 \
+  plasma-workspace-wayland \
+  kwin-wayland \
+  qtwayland5 \
+  bluedevil \
   alacritty \
   xterm \
-  picom \
   firefox-esr \
   ffmpeg \
   libavcodec-extra \
-  thunar \
-  thunar-volman \
   gvfs \
   gvfs-backends \
   flatpak \
   xdg-desktop-portal \
+  xdg-desktop-portal-kde \
   xdg-desktop-portal-gtk \
   network-manager \
-  network-manager-gnome \
   wpasupplicant \
   iw \
   rfkill \
   modemmanager \
   usb-modeswitch \
   bluez \
-  blueman \
   pipewire \
   pipewire-pulse \
   wireplumber \
@@ -203,11 +255,11 @@ apt-get install -y --no-install-recommends \
   dosfstools \
   e2fsprogs \
   xwayland \
-  weston \
   sudo \
   feh \
   maim \
   scrot \
+  kde-spectacle \
   xclip \
   wl-clipboard \
   grim \
@@ -215,7 +267,9 @@ apt-get install -y --no-install-recommends \
   libnotify-bin \
   xdg-utils \
   x11-xserver-utils \
+  fonts-ibm-plex \
   fonts-dejavu-core \
+  papirus-icon-theme \
   desktop-file-utils \
   neofetch \
   python3-tk \
@@ -276,41 +330,12 @@ cat > /etc/hosts <<HOSTSEOF
 127.0.1.1 \$HOSTNAME_VALUE
 HOSTSEOF
 
-mkdir -p /etc/lightdm/lightdm.conf.d
-cat > /etc/lightdm/lightdm.conf.d/50-crixa-autologin.conf <<LIGHTDMEOF
-[Seat:*]
-autologin-user=\$LIVE_USER
-autologin-user-timeout=0
-user-session=openbox
-greeter-hide-users=true
-allow-guest=false
-LIGHTDMEOF
-
+systemctl disable lightdm || true
 systemctl enable NetworkManager || true
 systemctl enable bluetooth || true
 systemctl enable ModemManager || true
-systemctl enable lightdm || true
+systemctl enable sddm || true
 systemctl set-default graphical.target
-
-mkdir -p /etc/skel/.config/openbox /etc/skel/.config/tint2 /etc/skel/.config/rofi /etc/skel/.config/gtk-3.0
-
-cat > /etc/skel/.bash_profile <<PROFILEEOF
-if [ -z "\${DISPLAY:-}" ] && [ "\$(tty)" = "/dev/tty1" ]; then
-  exec startx
-fi
-PROFILEEOF
-
-cat > /etc/skel/.xinitrc <<XINITEOF
-#!/bin/sh
-export XDG_CURRENT_DESKTOP=CRIXA
-export XDG_SESSION_DESKTOP=crixa
-export GTK_THEME=CRIXA
-if [ -f "\$HOME/.Xresources" ]; then
-  xrdb -merge "\$HOME/.Xresources"
-fi
-exec openbox-session
-XINITEOF
-chmod +x /etc/skel/.xinitrc
 EOF
 
   chmod +x "$BUILD_WORK_DIR/chroot-setup.sh"
@@ -347,26 +372,47 @@ install_crixa_assets() {
   }
 
   install -d "$ROOTFS_DIR/usr/share/themes/CRIXA/gtk-3.0"
-  install -d "$ROOTFS_DIR/usr/share/themes/CRIXA/openbox-3"
   install -m 0644 "$PROJECT_ROOT/themes/CRIXA/gtk.css" "$ROOTFS_DIR/usr/share/themes/CRIXA/gtk-3.0/gtk.css"
   install -m 0644 "$PROJECT_ROOT/themes/CRIXA/index.theme" "$ROOTFS_DIR/usr/share/themes/CRIXA/index.theme"
-  install -m 0644 "$PROJECT_ROOT/themes/CRIXA/openbox-themerc" "$ROOTFS_DIR/usr/share/themes/CRIXA/openbox-3/themerc"
 
   install -d "$ROOTFS_DIR/usr/share/backgrounds"
   install -d "$ROOTFS_DIR/usr/share/backgrounds/crixa"
-  install -m 0644 "$PROJECT_ROOT/assets/wallpapers/crixa-wallpaper.jpg" "$ROOTFS_DIR/usr/share/backgrounds/crixa-wallpaper.jpg"
+  install -m 0644 "$PROJECT_ROOT/Wallpapers/DefaultWP.jpeg" "$ROOTFS_DIR/usr/share/backgrounds/crixa-wallpaper.jpg"
   install -m 0644 "$PROJECT_ROOT/assets/wallpapers/crixa-wallpaper.svg" "$ROOTFS_DIR/usr/share/backgrounds/crixa-wallpaper.svg"
-  install -m 0644 "$PROJECT_ROOT/assets/wallpapers/crixa-wallpaper.jpg" "$ROOTFS_DIR/usr/share/backgrounds/crixa/00-crixa-default.jpg"
-  install -m 0644 "$PROJECT_ROOT/assets/wallpapers/crixa-wallpaper-orbit.jpg" "$ROOTFS_DIR/usr/share/backgrounds/crixa/10-crixa-orbit.jpg"
-  install -m 0644 "$PROJECT_ROOT/assets/wallpapers/crixa-wallpaper-nebula.jpg" "$ROOTFS_DIR/usr/share/backgrounds/crixa/20-crixa-nebula.jpg"
-  install -m 0644 "$PROJECT_ROOT/assets/wallpapers/crixa-wallpaper-planet.jpg" "$ROOTFS_DIR/usr/share/backgrounds/crixa/30-crixa-planet.jpg"
-  install -m 0644 "$PROJECT_ROOT/assets/wallpapers/crixa-wallpaper-saturn.jpg" "$ROOTFS_DIR/usr/share/backgrounds/crixa/40-crixa-saturn.jpg"
-  install -m 0644 "$PROJECT_ROOT/assets/wallpapers/crixa-wallpaper-jupiter.jpg" "$ROOTFS_DIR/usr/share/backgrounds/crixa/50-crixa-jupiter.jpg"
-  install -m 0644 "$PROJECT_ROOT/assets/wallpapers/crixa-wallpaper-aurora.jpg" "$ROOTFS_DIR/usr/share/backgrounds/crixa/60-crixa-aurora.jpg"
-  install -m 0644 "$PROJECT_ROOT/assets/wallpapers/crixa-wallpaper-rings.jpg" "$ROOTFS_DIR/usr/share/backgrounds/crixa/70-crixa-rings.jpg"
-  install -m 0644 "$PROJECT_ROOT/assets/wallpapers/crixa-wallpaper-uranus.jpg" "$ROOTFS_DIR/usr/share/backgrounds/crixa/80-crixa-uranus.jpg"
+  install -m 0644 "$PROJECT_ROOT/Wallpapers/DefaultWP.jpeg" "$ROOTFS_DIR/usr/share/backgrounds/crixa/00-defaultwp.jpg"
+  install -m 0644 "$PROJECT_ROOT/assets/wallpapers/crixa-wallpaper.jpg" "$ROOTFS_DIR/usr/share/backgrounds/crixa/10-crixa-default.jpg"
+  install -m 0644 "$PROJECT_ROOT/assets/wallpapers/crixa-wallpaper-orbit.jpg" "$ROOTFS_DIR/usr/share/backgrounds/crixa/20-crixa-orbit.jpg"
+  install -m 0644 "$PROJECT_ROOT/assets/wallpapers/crixa-wallpaper-nebula.jpg" "$ROOTFS_DIR/usr/share/backgrounds/crixa/30-crixa-nebula.jpg"
+  install -m 0644 "$PROJECT_ROOT/assets/wallpapers/crixa-wallpaper-planet.jpg" "$ROOTFS_DIR/usr/share/backgrounds/crixa/40-crixa-planet.jpg"
+  install -m 0644 "$PROJECT_ROOT/assets/wallpapers/crixa-wallpaper-saturn.jpg" "$ROOTFS_DIR/usr/share/backgrounds/crixa/50-crixa-saturn.jpg"
+  install -m 0644 "$PROJECT_ROOT/assets/wallpapers/crixa-wallpaper-jupiter.jpg" "$ROOTFS_DIR/usr/share/backgrounds/crixa/60-crixa-jupiter.jpg"
+  install -m 0644 "$PROJECT_ROOT/assets/wallpapers/crixa-wallpaper-aurora.jpg" "$ROOTFS_DIR/usr/share/backgrounds/crixa/70-crixa-aurora.jpg"
+  install -m 0644 "$PROJECT_ROOT/assets/wallpapers/crixa-wallpaper-rings.jpg" "$ROOTFS_DIR/usr/share/backgrounds/crixa/80-crixa-rings.jpg"
+  install -m 0644 "$PROJECT_ROOT/assets/wallpapers/crixa-wallpaper-uranus.jpg" "$ROOTFS_DIR/usr/share/backgrounds/crixa/90-crixa-uranus.jpg"
+
+  install -d "$ROOTFS_DIR/usr/share/plasma/look-and-feel/org.crixa.shell.desktop/contents/layouts"
+  install -m 0644 "$PROJECT_ROOT/plasma-shell/look-and-feel/org.crixa.shell.desktop/metadata.json" "$ROOTFS_DIR/usr/share/plasma/look-and-feel/org.crixa.shell.desktop/metadata.json"
+  install -m 0644 "$PROJECT_ROOT/plasma-shell/look-and-feel/org.crixa.shell.desktop/contents/defaults" "$ROOTFS_DIR/usr/share/plasma/look-and-feel/org.crixa.shell.desktop/contents/defaults"
+  install -m 0644 "$PROJECT_ROOT/plasma-shell/look-and-feel/org.crixa.shell.desktop/contents/layouts/org.kde.plasma.desktop-layout.js" "$ROOTFS_DIR/usr/share/plasma/look-and-feel/org.crixa.shell.desktop/contents/layouts/org.kde.plasma.desktop-layout.js"
+  install -d "$ROOTFS_DIR/usr/share/plasma/desktoptheme/crixa-material/widgets"
+  install -d "$ROOTFS_DIR/usr/share/plasma/desktoptheme/crixa-material/dialogs"
+  install -m 0644 "$PROJECT_ROOT/plasma-shell/desktoptheme/CRIXA-Material/metadata.json" "$ROOTFS_DIR/usr/share/plasma/desktoptheme/crixa-material/metadata.json"
+  install -m 0644 "$PROJECT_ROOT/plasma-shell/desktoptheme/CRIXA-Material/plasmarc" "$ROOTFS_DIR/usr/share/plasma/desktoptheme/crixa-material/plasmarc"
+  install -m 0644 "$PROJECT_ROOT/plasma-shell/desktoptheme/CRIXA-Material/widgets/panel-background.svg" "$ROOTFS_DIR/usr/share/plasma/desktoptheme/crixa-material/widgets/panel-background.svg"
+  install -m 0644 "$PROJECT_ROOT/plasma-shell/desktoptheme/CRIXA-Material/widgets/surface-solid.svg" "$ROOTFS_DIR/usr/share/plasma/desktoptheme/crixa-material/widgets/background.svg"
+  install -m 0644 "$PROJECT_ROOT/plasma-shell/desktoptheme/CRIXA-Material/widgets/surface-solid.svg" "$ROOTFS_DIR/usr/share/plasma/desktoptheme/crixa-material/dialogs/background.svg"
+  install -m 0644 "$PROJECT_ROOT/plasma-shell/desktoptheme/CRIXA-Material/widgets/surface-translucent.svg" "$ROOTFS_DIR/usr/share/plasma/desktoptheme/crixa-material/widgets/translucentbackground.svg"
+  install -m 0644 "$PROJECT_ROOT/plasma-shell/desktoptheme/CRIXA-Material/widgets/surface-translucent.svg" "$ROOTFS_DIR/usr/share/plasma/desktoptheme/crixa-material/widgets/tooltip.svg"
+  install -m 0644 "$PROJECT_ROOT/plasma-shell/desktoptheme/CRIXA-Material/widgets/tasks.svg" "$ROOTFS_DIR/usr/share/plasma/desktoptheme/crixa-material/widgets/tasks.svg"
+
+  install -d "$ROOTFS_DIR/usr/share/color-schemes"
+  install -m 0644 "$PROJECT_ROOT/plasma-shell/color-schemes/CrixaShell.colors" "$ROOTFS_DIR/usr/share/color-schemes/CrixaShell.colors"
+
+  install -m 0644 "$PROJECT_ROOT/plasma-shell/sddm/theme.conf.user" "$ROOTFS_DIR/usr/share/sddm/themes/breeze/theme.conf.user"
 
   install -d "$ROOTFS_DIR/usr/share/icons/hicolor/scalable/apps"
+  install -d "$ROOTFS_DIR/usr/share/icons/CRIXA-Depth/scalable/apps"
+  install -m 0644 "$PROJECT_ROOT/plasma-shell/icon-theme/CRIXA-Depth/index.theme" "$ROOTFS_DIR/usr/share/icons/CRIXA-Depth/index.theme"
   install -m 0644 "$PROJECT_ROOT/assets/icons/crixa-launcher.svg" "$ROOTFS_DIR/usr/share/icons/hicolor/scalable/apps/crixa-launcher.svg"
   install -m 0644 "$PROJECT_ROOT/assets/icons/crixa-settings.svg" "$ROOTFS_DIR/usr/share/icons/hicolor/scalable/apps/crixa-settings.svg"
   install -m 0644 "$PROJECT_ROOT/assets/icons/crixa-store.svg" "$ROOTFS_DIR/usr/share/icons/hicolor/scalable/apps/crixa-store.svg"
@@ -379,6 +425,9 @@ install_crixa_assets() {
   install -m 0644 "$PROJECT_ROOT/assets/icons/crixa-updater.svg" "$ROOTFS_DIR/usr/share/icons/hicolor/scalable/apps/crixa-updater.svg"
   install -m 0644 "$PROJECT_ROOT/assets/icons/crixa-wayland-control.svg" "$ROOTFS_DIR/usr/share/icons/hicolor/scalable/apps/crixa-wayland-control.svg"
   install -m 0644 "$PROJECT_ROOT/assets/icons/crixa-youtube.svg" "$ROOTFS_DIR/usr/share/icons/hicolor/scalable/apps/crixa-youtube.svg"
+  for icon_path in "$PROJECT_ROOT"/assets/icons/crixa-*.svg; do
+    install -m 0644 "$icon_path" "$ROOTFS_DIR/usr/share/icons/CRIXA-Depth/scalable/apps/$(basename "$icon_path")"
+  done
 
   install -m 0755 "$PROJECT_ROOT/apps/crixa-settings.sh" "$ROOTFS_DIR/usr/local/bin/crixa-settings"
   install -m 0755 "$PROJECT_ROOT/apps/crixa-settings.py" "$ROOTFS_DIR/usr/local/bin/crixa-settings.py"
@@ -389,7 +438,6 @@ install_crixa_assets() {
   install -m 0755 "$PROJECT_ROOT/apps/crixa-updater.sh" "$ROOTFS_DIR/usr/local/bin/crixa-updater"
   install -m 0755 "$PROJECT_ROOT/apps/crixa-updater.py" "$ROOTFS_DIR/usr/local/bin/crixa-updater.py"
   install -m 0755 "$PROJECT_ROOT/apps/crixa-session-mode.sh" "$ROOTFS_DIR/usr/local/bin/crixa-session-mode"
-  install -m 0755 "$PROJECT_ROOT/apps/crixa-wayland-session.sh" "$ROOTFS_DIR/usr/local/bin/crixa-wayland-session"
   install -m 0755 "$PROJECT_ROOT/apps/crixa-wayland-control.sh" "$ROOTFS_DIR/usr/local/bin/crixa-wayland-control"
   install -m 0755 "$PROJECT_ROOT/apps/crixa-wayland-control.py" "$ROOTFS_DIR/usr/local/bin/crixa-wayland-control.py"
   install -m 0755 "$PROJECT_ROOT/apps/crixa-releasectl.sh" "$ROOTFS_DIR/usr/local/bin/crixa-releasectl"
@@ -397,6 +445,7 @@ install_crixa_assets() {
   install -m 0755 "$PROJECT_ROOT/apps/crixapkg.sh" "$ROOTFS_DIR/usr/local/bin/crixapkg"
   install -m 0755 "$PROJECT_ROOT/apps/crixapkg.py" "$ROOTFS_DIR/usr/local/bin/crixapkg.py"
   install -m 0755 "$PROJECT_ROOT/apps/crixa-browser.sh" "$ROOTFS_DIR/usr/local/bin/crixa-browser"
+  install -m 0755 "$PROJECT_ROOT/apps/crixa-dashboard.py" "$ROOTFS_DIR/usr/local/bin/crixa-dashboard"
   install -m 0755 "$PROJECT_ROOT/apps/crixa-terminal.sh" "$ROOTFS_DIR/usr/local/bin/crixa-terminal"
   install -m 0755 "$PROJECT_ROOT/apps/crixa-files.sh" "$ROOTFS_DIR/usr/local/bin/crixa-files"
   install -m 0755 "$PROJECT_ROOT/apps/crixa-menu.sh" "$ROOTFS_DIR/usr/local/bin/crixa-menu"
@@ -405,6 +454,8 @@ install_crixa_assets() {
   install -m 0755 "$PROJECT_ROOT/apps/crixa-task-manager.sh" "$ROOTFS_DIR/usr/local/bin/crixa-task-manager"
   install -m 0755 "$PROJECT_ROOT/apps/crixa-task-manager.py" "$ROOTFS_DIR/usr/local/bin/crixa-task-manager.py"
   install -m 0755 "$PROJECT_ROOT/apps/crixa-fetch.sh" "$ROOTFS_DIR/usr/local/bin/crixa-fetch"
+  install -m 0755 "$PROJECT_ROOT/apps/crixa-shell-bootstrap.sh" "$ROOTFS_DIR/usr/local/bin/crixa-shell-bootstrap"
+  install -m 0755 "$PROJECT_ROOT/apps/fastfetch.sh" "$ROOTFS_DIR/usr/local/bin/fastfetch"
   install -m 0755 "$PROJECT_ROOT/apps/neofetch.sh" "$ROOTFS_DIR/usr/local/bin/neofetch"
   install -d "$ROOTFS_DIR/usr/local/sbin"
   install -m 0755 "$PROJECT_ROOT/apps/crixa-install.sh" "$ROOTFS_DIR/usr/local/sbin/crixa-install"
@@ -421,9 +472,6 @@ install_crixa_assets() {
   install -m 0644 "$PROJECT_ROOT/apps/crixa-installer.desktop" "$ROOTFS_DIR/usr/share/applications/crixa-installer.desktop"
   install -m 0644 "$PROJECT_ROOT/apps/crixa-updater.desktop" "$ROOTFS_DIR/usr/share/applications/crixa-updater.desktop"
   install -m 0644 "$PROJECT_ROOT/apps/crixa-wayland-control.desktop" "$ROOTFS_DIR/usr/share/applications/crixa-wayland-control.desktop"
-  install -d "$ROOTFS_DIR/usr/share/wayland-sessions" "$ROOTFS_DIR/usr/share/xsessions"
-  install -m 0644 "$PROJECT_ROOT/apps/crixa-wayland-session.desktop" "$ROOTFS_DIR/usr/share/wayland-sessions/crixa-wayland.desktop"
-  install -m 0644 "$PROJECT_ROOT/apps/crixa-wayland-session.desktop" "$ROOTFS_DIR/usr/share/xsessions/crixa-wayland.desktop"
 
   install -d "$ROOTFS_DIR/usr/share/crixa-store"
   install -m 0644 "$PROJECT_ROOT/store-packages/catalog.json" "$ROOTFS_DIR/usr/share/crixa-store/catalog.json"
@@ -452,39 +500,61 @@ install_crixa_assets() {
 }
 EOF
 
-  install -d "$ROOTFS_DIR/etc/skel/.config/openbox"
-  install -d "$ROOTFS_DIR/etc/skel/.config/tint2"
-  install -d "$ROOTFS_DIR/etc/skel/.config/rofi"
   install -d "$ROOTFS_DIR/etc/skel/.config/gtk-3.0"
-  install -d "$ROOTFS_DIR/etc/skel/.config/Thunar"
-  install -d "$ROOTFS_DIR/etc/skel/.config/picom"
+  install -d "$ROOTFS_DIR/etc/skel/.config/kdedefaults"
   install -d "$ROOTFS_DIR/etc/skel/.config/crixa-store/backends"
-  install -d "$ROOTFS_DIR/etc/skel/.config/labwc"
-  install -d "$ROOTFS_DIR/etc/skel/.config/waybar"
-  install -d "$ROOTFS_DIR/etc/skel/.config/wofi"
+  install -d "$ROOTFS_DIR/etc/sddm.conf.d"
+  install -d "$ROOTFS_DIR/etc/xdg/autostart"
   install -d "$ROOTFS_DIR/etc/X11/xorg.conf.d"
-  install -m 0644 "$PROJECT_ROOT/ui-shell/rc.xml" "$ROOTFS_DIR/etc/skel/.config/openbox/rc.xml"
-  install -m 0644 "$PROJECT_ROOT/ui-shell/menu.xml" "$ROOTFS_DIR/etc/skel/.config/openbox/menu.xml"
-  install -m 0755 "$PROJECT_ROOT/ui-shell/autostart" "$ROOTFS_DIR/etc/skel/.config/openbox/autostart"
-  install -m 0644 "$PROJECT_ROOT/ui-shell/tint2rc" "$ROOTFS_DIR/etc/skel/.config/tint2/tint2rc"
-  install -m 0644 "$PROJECT_ROOT/ui-shell/rofi.rasi" "$ROOTFS_DIR/etc/skel/.config/rofi/config.rasi"
-  install -m 0644 "$PROJECT_ROOT/ui-shell/Xresources" "$ROOTFS_DIR/etc/skel/.Xresources"
+
+  cat > "$ROOTFS_DIR/etc/sddm.conf.d/10-crixa.conf" <<EOF
+[General]
+DisplayServer=x11
+
+[Theme]
+Current=breeze
+CursorTheme=breeze_cursors
+EnableAvatars=false
+
+[Users]
+RememberLastSession=false
+RememberLastUser=false
+EOF
+
+  cat > "$ROOTFS_DIR/etc/sddm.conf.d/20-crixa-autologin.conf" <<EOF
+[Autologin]
+User=$LIVE_USER
+Session=plasma.desktop
+Relogin=false
+EOF
+
+  rm -f "$ROOTFS_DIR/etc/lightdm/lightdm.conf.d/50-crixa-autologin.conf"
+  rm -rf \
+    "$ROOTFS_DIR/etc/skel/.config/openbox" \
+    "$ROOTFS_DIR/etc/skel/.config/tint2" \
+    "$ROOTFS_DIR/etc/skel/.config/rofi" \
+    "$ROOTFS_DIR/etc/skel/.config/Thunar" \
+    "$ROOTFS_DIR/etc/skel/.config/picom" \
+    "$ROOTFS_DIR/etc/skel/.config/labwc" \
+    "$ROOTFS_DIR/etc/skel/.config/waybar" \
+    "$ROOTFS_DIR/etc/skel/.config/wofi" \
+    "$ROOTFS_DIR/usr/share/themes/CRIXA/openbox-3"
+  rm -f "$ROOTFS_DIR/etc/skel/.bash_profile" "$ROOTFS_DIR/etc/skel/.xinitrc"
   install -m 0644 "$PROJECT_ROOT/ui-shell/gtk-settings.ini" "$ROOTFS_DIR/etc/skel/.config/gtk-3.0/settings.ini"
-  install -m 0644 "$PROJECT_ROOT/ui-shell/thunar-uca.xml" "$ROOTFS_DIR/etc/skel/.config/Thunar/uca.xml"
-  install -m 0644 "$PROJECT_ROOT/ui-shell/thunarrc" "$ROOTFS_DIR/etc/skel/.config/Thunar/thunarrc"
-  install -m 0644 "$PROJECT_ROOT/ui-shell/picom.conf" "$ROOTFS_DIR/etc/skel/.config/picom/picom.conf"
-  install -m 0755 "$PROJECT_ROOT/ui-shell-wayland/labwc/autostart" "$ROOTFS_DIR/etc/skel/.config/labwc/autostart"
-  install -m 0644 "$PROJECT_ROOT/ui-shell-wayland/labwc/environment" "$ROOTFS_DIR/etc/skel/.config/labwc/environment"
-  install -m 0644 "$PROJECT_ROOT/ui-shell-wayland/waybar/config" "$ROOTFS_DIR/etc/skel/.config/waybar/config"
-  install -m 0644 "$PROJECT_ROOT/ui-shell-wayland/waybar/style.css" "$ROOTFS_DIR/etc/skel/.config/waybar/style.css"
-  install -m 0644 "$PROJECT_ROOT/ui-shell-wayland/wofi/config" "$ROOTFS_DIR/etc/skel/.config/wofi/config"
-  install -m 0644 "$PROJECT_ROOT/ui-shell-wayland/wofi/style.css" "$ROOTFS_DIR/etc/skel/.config/wofi/style.css"
+  install -m 0644 "$PROJECT_ROOT/plasma-shell/config/kdedefaults/package" "$ROOTFS_DIR/etc/skel/.config/kdedefaults/package"
+  install -m 0644 "$PROJECT_ROOT/plasma-shell/config/kdedefaults/kdeglobals" "$ROOTFS_DIR/etc/skel/.config/kdedefaults/kdeglobals"
+  install -m 0644 "$PROJECT_ROOT/plasma-shell/config/kdedefaults/plasmarc" "$ROOTFS_DIR/etc/skel/.config/kdedefaults/plasmarc"
+  install -m 0644 "$PROJECT_ROOT/plasma-shell/config/kdedefaults/kwinrc" "$ROOTFS_DIR/etc/skel/.config/kdedefaults/kwinrc"
+  install -m 0644 "$PROJECT_ROOT/plasma-shell/config/kdedefaults/kcminputrc" "$ROOTFS_DIR/etc/skel/.config/kdedefaults/kcminputrc"
+  install -m 0644 "$PROJECT_ROOT/plasma-shell/config/kdedefaults/ksplashrc" "$ROOTFS_DIR/etc/skel/.config/kdedefaults/ksplashrc"
+  install -m 0644 "$PROJECT_ROOT/plasma-shell/autostart/crixa-shell-bootstrap.desktop" "$ROOTFS_DIR/etc/xdg/autostart/crixa-shell-bootstrap.desktop"
   install -m 0644 "$PROJECT_ROOT/ui-shell/xorg-input.conf" "$ROOTFS_DIR/etc/X11/xorg.conf.d/40-crixa-input.conf"
 
   ensure_bashrc_snippet "$ROOTFS_DIR/etc/skel/.bashrc"
   chroot "$ROOTFS_DIR" /bin/bash -lc "cp -a /etc/skel/. /home/$LIVE_USER/ && chown -R $LIVE_USER:$LIVE_USER /home/$LIVE_USER"
+  rm -f "$ROOTFS_DIR/home/$LIVE_USER/.bash_profile" "$ROOTFS_DIR/home/$LIVE_USER/.xinitrc"
   ensure_bashrc_snippet "$ROOTFS_DIR/home/$LIVE_USER/.bashrc"
-  chroot "$ROOTFS_DIR" /bin/bash -lc "systemctl disable apt-daily.timer apt-daily-upgrade.timer man-db.timer e2scrub_all.timer fstrim.timer NetworkManager-wait-online.service || true"
+  chroot "$ROOTFS_DIR" /bin/bash -lc "systemctl disable apt-daily.timer apt-daily-upgrade.timer man-db.timer e2scrub_all.timer fstrim.timer NetworkManager-wait-online.service lightdm.service || true"
   chroot "$ROOTFS_DIR" /bin/bash -lc "gtk-update-icon-cache -f /usr/share/icons/hicolor || true"
   chroot "$ROOTFS_DIR" /bin/bash -lc "update-desktop-database /usr/share/applications || true"
   chroot "$ROOTFS_DIR" /bin/bash -lc "update-initramfs -u -k all"
@@ -584,16 +654,10 @@ main() {
 
   require_file "$PROJECT_ROOT/boot/grub.cfg"
   require_file "$PROJECT_ROOT/themes/CRIXA/gtk.css"
-  require_file "$PROJECT_ROOT/themes/CRIXA/openbox-themerc"
-  require_file "$PROJECT_ROOT/ui-shell/rc.xml"
-  require_file "$PROJECT_ROOT/ui-shell/menu.xml"
-  require_file "$PROJECT_ROOT/ui-shell/autostart"
-  require_file "$PROJECT_ROOT/ui-shell/tint2rc"
-  require_file "$PROJECT_ROOT/ui-shell/rofi.rasi"
-  require_file "$PROJECT_ROOT/ui-shell/picom.conf"
-  require_file "$PROJECT_ROOT/ui-shell/thunar-uca.xml"
-  require_file "$PROJECT_ROOT/ui-shell/thunarrc"
+  require_file "$PROJECT_ROOT/themes/CRIXA/index.theme"
+  require_file "$PROJECT_ROOT/ui-shell/gtk-settings.ini"
   require_file "$PROJECT_ROOT/ui-shell/xorg-input.conf"
+  require_file "$PROJECT_ROOT/ui-shell/bashrc-crixa-snippet"
   require_file "$PROJECT_ROOT/apps/crixa-settings.sh"
   require_file "$PROJECT_ROOT/apps/crixa-settings.py"
   require_file "$PROJECT_ROOT/apps/crixa-store.sh"
@@ -604,7 +668,6 @@ main() {
   require_file "$PROJECT_ROOT/apps/crixa-updater.sh"
   require_file "$PROJECT_ROOT/apps/crixa-updater.py"
   require_file "$PROJECT_ROOT/apps/crixa-session-mode.sh"
-  require_file "$PROJECT_ROOT/apps/crixa-wayland-session.sh"
   require_file "$PROJECT_ROOT/apps/crixa-wayland-control.sh"
   require_file "$PROJECT_ROOT/apps/crixa-wayland-control.py"
   require_file "$PROJECT_ROOT/apps/crixa-releasectl.sh"
@@ -620,9 +683,12 @@ main() {
   require_file "$PROJECT_ROOT/apps/crixa-task-manager.sh"
   require_file "$PROJECT_ROOT/apps/crixa-task-manager.py"
   require_file "$PROJECT_ROOT/apps/crixa-fetch.sh"
+  require_file "$PROJECT_ROOT/apps/crixa-shell-bootstrap.sh"
+  require_file "$PROJECT_ROOT/apps/fastfetch.sh"
   require_file "$PROJECT_ROOT/apps/neofetch.sh"
   require_file "$PROJECT_ROOT/apps/crixa-settings.desktop"
   require_file "$PROJECT_ROOT/apps/crixa-browser.desktop"
+  require_file "$PROJECT_ROOT/apps/crixa-dashboard.py"
   require_file "$PROJECT_ROOT/apps/crixa-launcher.desktop"
   require_file "$PROJECT_ROOT/apps/crixa-terminal.desktop"
   require_file "$PROJECT_ROOT/apps/crixa-files.desktop"
@@ -632,8 +698,8 @@ main() {
   require_file "$PROJECT_ROOT/apps/crixa-store.desktop"
   require_file "$PROJECT_ROOT/apps/crixa-installer.desktop"
   require_file "$PROJECT_ROOT/apps/crixa-updater.desktop"
-  require_file "$PROJECT_ROOT/apps/crixa-wayland-session.desktop"
   require_file "$PROJECT_ROOT/apps/crixa-wayland-control.desktop"
+  require_file "$PROJECT_ROOT/Wallpapers/DefaultWP.jpeg"
   require_file "$PROJECT_ROOT/assets/wallpapers/crixa-wallpaper.jpg"
   require_file "$PROJECT_ROOT/assets/wallpapers/crixa-wallpaper.svg"
   require_file "$PROJECT_ROOT/assets/wallpapers/crixa-wallpaper-orbit.jpg"
@@ -657,24 +723,28 @@ main() {
   require_file "$PROJECT_ROOT/assets/icons/crixa-wayland-control.svg"
   require_file "$PROJECT_ROOT/assets/icons/crixa-youtube.svg"
   require_file "$PROJECT_ROOT/assets/icons/LICENSE.txt"
+  require_file "$PROJECT_ROOT/plasma-shell/icon-theme/CRIXA-Depth/index.theme"
+  require_file "$PROJECT_ROOT/plasma-shell/look-and-feel/org.crixa.shell.desktop/metadata.json"
+  require_file "$PROJECT_ROOT/plasma-shell/look-and-feel/org.crixa.shell.desktop/contents/defaults"
+  require_file "$PROJECT_ROOT/plasma-shell/look-and-feel/org.crixa.shell.desktop/contents/layouts/org.kde.plasma.desktop-layout.js"
+  require_file "$PROJECT_ROOT/plasma-shell/desktoptheme/CRIXA-Material/metadata.json"
+  require_file "$PROJECT_ROOT/plasma-shell/desktoptheme/CRIXA-Material/plasmarc"
+  require_file "$PROJECT_ROOT/plasma-shell/desktoptheme/CRIXA-Material/widgets/panel-background.svg"
+  require_file "$PROJECT_ROOT/plasma-shell/desktoptheme/CRIXA-Material/widgets/surface-solid.svg"
+  require_file "$PROJECT_ROOT/plasma-shell/desktoptheme/CRIXA-Material/widgets/surface-translucent.svg"
+  require_file "$PROJECT_ROOT/plasma-shell/desktoptheme/CRIXA-Material/widgets/tasks.svg"
+  require_file "$PROJECT_ROOT/plasma-shell/color-schemes/CrixaShell.colors"
+  require_file "$PROJECT_ROOT/plasma-shell/config/kdedefaults/package"
+  require_file "$PROJECT_ROOT/plasma-shell/config/kdedefaults/kdeglobals"
+  require_file "$PROJECT_ROOT/plasma-shell/config/kdedefaults/plasmarc"
+  require_file "$PROJECT_ROOT/plasma-shell/config/kdedefaults/kwinrc"
+  require_file "$PROJECT_ROOT/plasma-shell/config/kdedefaults/kcminputrc"
+  require_file "$PROJECT_ROOT/plasma-shell/config/kdedefaults/ksplashrc"
+  require_file "$PROJECT_ROOT/plasma-shell/autostart/crixa-shell-bootstrap.desktop"
+  require_file "$PROJECT_ROOT/plasma-shell/sddm/theme.conf.user"
   require_file "$PROJECT_ROOT/store-packages/catalog.json"
   require_file "$PROJECT_ROOT/store-packages/system-rollouts.json"
   require_file "$PROJECT_ROOT/store-packages/packages/lumen-notes/payload/bin/lumen-notes"
-  require_file "$PROJECT_ROOT/store-packages/packages/lumen-notes/payload/applications/lumen-notes.desktop"
-  require_file "$PROJECT_ROOT/store-packages/packages/lumen-notes/payload/icons/hicolor/scalable/apps/lumen-notes.svg"
-  require_file "$PROJECT_ROOT/store-packages/packages/orbit-tasks/payload/bin/orbit-tasks"
-  require_file "$PROJECT_ROOT/store-packages/packages/orbit-tasks/payload/applications/orbit-tasks.desktop"
-  require_file "$PROJECT_ROOT/store-packages/packages/orbit-tasks/payload/icons/hicolor/scalable/apps/orbit-tasks.svg"
-  require_file "$PROJECT_ROOT/store-packages/packages/media-lab/payload/bin/media-lab"
-  require_file "$PROJECT_ROOT/store-packages/packages/media-lab/payload/applications/media-lab.desktop"
-  require_file "$PROJECT_ROOT/store-packages/packages/media-lab/payload/icons/hicolor/scalable/apps/media-lab.svg"
-  require_file "$PROJECT_ROOT/ui-shell/bashrc-crixa-snippet"
-  require_file "$PROJECT_ROOT/ui-shell-wayland/labwc/autostart"
-  require_file "$PROJECT_ROOT/ui-shell-wayland/labwc/environment"
-  require_file "$PROJECT_ROOT/ui-shell-wayland/waybar/config"
-  require_file "$PROJECT_ROOT/ui-shell-wayland/waybar/style.css"
-  require_file "$PROJECT_ROOT/ui-shell-wayland/wofi/config"
-  require_file "$PROJECT_ROOT/ui-shell-wayland/wofi/style.css"
   require_file "$PROJECT_ROOT/store-backends/backend-crixa-repo.py"
   require_file "$PROJECT_ROOT/store-backends/backend-flatpak.py"
   require_file "$PROJECT_ROOT/store-backends/manifests/crixa-repo.json"
@@ -682,6 +752,14 @@ main() {
   require_file "$PROJECT_ROOT/store-backends/extensions/README.md"
   require_file "$PROJECT_ROOT/store-backends/extensions/example-template.py"
   require_file "$PROJECT_ROOT/build/build-crixa-repo.sh"
+
+  for package_dir in "$PROJECT_ROOT"/store-packages/packages/*; do
+    [[ -d "$package_dir" ]] || continue
+    package_id="$(basename "$package_dir")"
+    require_file "$package_dir/payload/bin/$package_id"
+    require_file "$package_dir/payload/applications/$package_id.desktop"
+    require_file "$package_dir/payload/icons/hicolor/scalable/apps/$package_id.svg"
+  done
 
   install_host_dependencies
   reset_workspace

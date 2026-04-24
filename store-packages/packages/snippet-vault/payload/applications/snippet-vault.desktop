@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Snippet Vault
+Comment=Searchable local code and text snippets
+Exec=snippet-vault
+Icon=snippet-vault
+Categories=Development;Utility;
+Terminal=false

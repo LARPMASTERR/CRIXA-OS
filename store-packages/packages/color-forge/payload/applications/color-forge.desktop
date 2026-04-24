@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Color Forge
+Comment=Palette generator for UI colors
+Exec=color-forge
+Icon=color-forge
+Categories=Graphics;Development;
+Terminal=false

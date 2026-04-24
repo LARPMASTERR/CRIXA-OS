@@ -1,0 +1,119 @@
+#!/usr/bin/env python3
+import json
+import time
+from pathlib import Path
+import tkinter as tk
+from tkinter import ttk
+
+DATA_DIR = Path.home() / ".local" / "share" / "focus-ring"
+DATA_FILE = DATA_DIR / "history.json"
+
+
+class FocusRing(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("Focus Ring")
+        self.geometry("520x430")
+        self.minsize(440, 360)
+        self.configure(bg="#14171b")
+        self.mode = tk.StringVar(value="Focus")
+        self.minutes = tk.IntVar(value=25)
+        self.remaining = 25 * 60
+        self.running = False
+        self.started = 0.0
+        self.status = tk.StringVar(value="Ready")
+        self.clock = tk.StringVar(value="25:00")
+        self._style()
+        self._ui()
+
+    def _style(self):
+        self.style = ttk.Style(self)
+        try:
+            self.style.theme_use("clam")
+        except tk.TclError:
+            pass
+        self.style.configure(".", background="#14171b", foreground="#edf5f2", font=("Helvetica", 10))
+        self.style.configure("TButton", padding=(10, 7))
+        self.style.configure("Muted.TLabel", foreground="#9aa8a5")
+
+    def _ui(self):
+        self.grid_columnconfigure(0, weight=1)
+        ttk.Label(self, text="Focus Ring", font=("Helvetica", 20, "bold")).grid(row=0, column=0, pady=(22, 4))
+        ttk.Label(self, textvariable=self.status, style="Muted.TLabel").grid(row=1, column=0, pady=(0, 14))
+        tk.Label(self, textvariable=self.clock, bg="#14171b", fg="#32c7b8", font=("Courier", 54, "bold")).grid(row=2, column=0)
+        controls = ttk.Frame(self)
+        controls.grid(row=3, column=0, pady=12)
+        ttk.Combobox(controls, textvariable=self.mode, values=["Focus", "Short Break", "Long Break"], state="readonly", width=14).grid(row=0, column=0, padx=4)
+        ttk.Spinbox(controls, from_=1, to=120, textvariable=self.minutes, width=6, command=self.reset).grid(row=0, column=1, padx=4)
+        row = ttk.Frame(self)
+        row.grid(row=4, column=0, pady=8)
+        ttk.Button(row, text="Start", command=self.start).grid(row=0, column=0, padx=4)
+        ttk.Button(row, text="Pause", command=self.pause).grid(row=0, column=1, padx=4)
+        ttk.Button(row, text="Reset", command=self.reset).grid(row=0, column=2, padx=4)
+        self.log = tk.Listbox(self, bg="#0f1216", fg="#edf5f2", selectbackground="#1a7f78", relief="flat", height=7)
+        self.log.grid(row=5, column=0, sticky="nsew", padx=22, pady=(14, 18))
+        self.grid_rowconfigure(5, weight=1)
+        self.load_log()
+
+    def start(self):
+        if not self.running:
+            self.running = True
+            self.started = time.time()
+            self.status.set(f"{self.mode.get()} in progress")
+            self.after(250, self.tick)
+
+    def pause(self):
+        self.running = False
+        self.status.set("Paused")
+
+    def reset(self):
+        self.running = False
+        self.remaining = max(1, int(self.minutes.get())) * 60
+        self.clock.set(self.format_time(self.remaining))
+        self.status.set("Ready")
+
+    def tick(self):
+        if not self.running:
+            return
+        elapsed = int(time.time() - self.started)
+        self.started = time.time()
+        self.remaining = max(0, self.remaining - elapsed)
+        self.clock.set(self.format_time(self.remaining))
+        if self.remaining <= 0:
+            self.running = False
+            self.status.set(f"{self.mode.get()} complete")
+            self.record()
+            self.bell()
+            return
+        self.after(250, self.tick)
+
+    def record(self):
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        rows = []
+        if DATA_FILE.exists():
+            try:
+                rows = json.loads(DATA_FILE.read_text()).get("sessions", [])
+            except Exception:
+                rows = []
+        rows.insert(0, {"mode": self.mode.get(), "minutes": int(self.minutes.get()), "at": time.strftime("%Y-%m-%d %H:%M")})
+        DATA_FILE.write_text(json.dumps({"sessions": rows[:50]}, indent=2))
+        self.load_log()
+
+    def load_log(self):
+        self.log.delete(0, tk.END)
+        rows = []
+        if DATA_FILE.exists():
+            try:
+                rows = json.loads(DATA_FILE.read_text()).get("sessions", [])
+            except Exception:
+                rows = []
+        for row in rows[:20]:
+            self.log.insert(tk.END, f"{row.get('at')}  |  {row.get('mode')}  |  {row.get('minutes')} min")
+
+    @staticmethod
+    def format_time(seconds):
+        return f"{seconds // 60:02d}:{seconds % 60:02d}"
+
+
+if __name__ == "__main__":
+    FocusRing().mainloop()

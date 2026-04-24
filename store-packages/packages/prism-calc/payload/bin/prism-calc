@@ -1,0 +1,96 @@
+#!/usr/bin/env python3
+import math
+import tkinter as tk
+from tkinter import ttk
+
+UNITS = {
+    "Length": {"m": 1, "km": 1000, "cm": 0.01, "mm": 0.001, "mi": 1609.344, "ft": 0.3048, "in": 0.0254},
+    "Mass": {"kg": 1, "g": 0.001, "lb": 0.45359237, "oz": 0.028349523125},
+    "Data": {"B": 1, "KB": 1000, "MB": 1000**2, "GB": 1000**3, "KiB": 1024, "MiB": 1024**2, "GiB": 1024**3},
+}
+
+
+class PrismCalc(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("Prism Calc")
+        self.geometry("650x500")
+        self.configure(bg="#151719")
+        self.expr = tk.StringVar()
+        self.result = tk.StringVar(value="0")
+        self.kind = tk.StringVar(value="Length")
+        self.from_unit = tk.StringVar(value="m")
+        self.to_unit = tk.StringVar(value="ft")
+        self.amount = tk.StringVar(value="1")
+        self.converted = tk.StringVar(value="")
+        self._style()
+        self._ui()
+
+    def _style(self):
+        self.style = ttk.Style(self)
+        try:
+            self.style.theme_use("clam")
+        except tk.TclError:
+            pass
+        self.style.configure(".", background="#151719", foreground="#edf5f2", font=("Helvetica", 10))
+        self.style.configure("TButton", padding=(10, 7))
+        self.style.configure("Muted.TLabel", foreground="#98a6a2")
+
+    def _ui(self):
+        self.grid_columnconfigure(0, weight=1)
+        ttk.Label(self, text="Prism Calc", font=("Helvetica", 19, "bold")).grid(row=0, column=0, sticky="w", padx=18, pady=(18, 8))
+        display = tk.Entry(self, textvariable=self.expr, bg="#0f1216", fg="#edf5f2", insertbackground="#edf5f2", relief="flat", font=("Courier", 16))
+        display.grid(row=1, column=0, sticky="ew", padx=18, ipady=9)
+        tk.Label(self, textvariable=self.result, bg="#151719", fg="#32c7b8", font=("Courier", 22, "bold")).grid(row=2, column=0, sticky="e", padx=18, pady=8)
+        buttons = ttk.Frame(self)
+        buttons.grid(row=3, column=0, sticky="ew", padx=18)
+        for i, text in enumerate(["7", "8", "9", "/", "sin(", "4", "5", "6", "*", "cos(", "1", "2", "3", "-", "sqrt(", "0", ".", "(", ")", "+"]):
+            ttk.Button(buttons, text=text, command=lambda t=text: self.add(t)).grid(row=i // 5, column=i % 5, sticky="ew", padx=3, pady=3)
+            buttons.grid_columnconfigure(i % 5, weight=1)
+        row = ttk.Frame(self)
+        row.grid(row=4, column=0, sticky="ew", padx=18, pady=(6, 18))
+        ttk.Button(row, text="Evaluate", command=self.evaluate).pack(side="left", padx=(0, 6))
+        ttk.Button(row, text="Clear", command=lambda: self.expr.set("")).pack(side="left")
+        box = ttk.LabelFrame(self, text="Converter")
+        box.grid(row=5, column=0, sticky="ew", padx=18, pady=(0, 18))
+        for col in range(6):
+            box.grid_columnconfigure(col, weight=1)
+        ttk.Combobox(box, textvariable=self.kind, values=list(UNITS), state="readonly", width=12).grid(row=0, column=0, padx=5, pady=10)
+        ttk.Entry(box, textvariable=self.amount, width=10).grid(row=0, column=1, padx=5)
+        self.from_box = ttk.Combobox(box, textvariable=self.from_unit, values=list(UNITS["Length"]), state="readonly", width=8)
+        self.to_box = ttk.Combobox(box, textvariable=self.to_unit, values=list(UNITS["Length"]), state="readonly", width=8)
+        self.from_box.grid(row=0, column=2, padx=5)
+        ttk.Label(box, text="to").grid(row=0, column=3, padx=5)
+        self.to_box.grid(row=0, column=4, padx=5)
+        ttk.Button(box, text="Convert", command=self.convert).grid(row=0, column=5, padx=5)
+        ttk.Label(box, textvariable=self.converted, style="Muted.TLabel").grid(row=1, column=0, columnspan=6, sticky="w", padx=8, pady=(0, 10))
+        self.kind.trace_add("write", lambda *_: self.update_units())
+
+    def add(self, text):
+        self.expr.set(self.expr.get() + text)
+
+    def evaluate(self):
+        allowed = {k: getattr(math, k) for k in ("sin", "cos", "tan", "sqrt", "log", "pi", "e")}
+        try:
+            self.result.set(str(eval(self.expr.get(), {"__builtins__": {}}, allowed)))
+        except Exception as exc:
+            self.result.set(f"Error: {exc}")
+
+    def update_units(self):
+        units = list(UNITS[self.kind.get()])
+        self.from_box.configure(values=units)
+        self.to_box.configure(values=units)
+        self.from_unit.set(units[0])
+        self.to_unit.set(units[min(1, len(units) - 1)])
+
+    def convert(self):
+        try:
+            base = float(self.amount.get()) * UNITS[self.kind.get()][self.from_unit.get()]
+            value = base / UNITS[self.kind.get()][self.to_unit.get()]
+            self.converted.set(f"{self.amount.get()} {self.from_unit.get()} = {value:g} {self.to_unit.get()}")
+        except Exception as exc:
+            self.converted.set(f"Conversion error: {exc}")
+
+
+if __name__ == "__main__":
+    PrismCalc().mainloop()

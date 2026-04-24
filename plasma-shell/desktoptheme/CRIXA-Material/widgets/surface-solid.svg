@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="157" height="64" viewBox="0 0 157 64" version="1.1" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="surface-fill" x1="0" y1="16" x2="0" y2="48" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0f1829" stop-opacity="0.98"/>
+      <stop offset="1" stop-color="#0b1321" stop-opacity="0.98"/>
+    </linearGradient>
+    <linearGradient id="surface-edge" x1="0" y1="16" x2="0" y2="48" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#9ed4ff" stop-opacity="0.24"/>
+      <stop offset="1" stop-color="#9ed4ff" stop-opacity="0.10"/>
+    </linearGradient>
+  </defs>
+
+  <rect id="hint-tile-center" x="1" y="1" width="5" height="5" fill="#ff00ff"/>
+
+  <g id="center">
+    <rect x="70" y="24" width="18" height="16" fill="url(#surface-fill)"/>
+    <rect x="70" y="24" width="18" height="1" fill="#ffffff" opacity="0.04"/>
+  </g>
+  <g id="top">
+    <rect x="70" y="16" width="18" height="8" fill="url(#surface-fill)"/>
+    <rect x="70" y="16" width="18" height="1" fill="#7fc7ff" opacity="0.22"/>
+  </g>
+  <g id="bottom">
+    <rect x="70" y="40" width="18" height="8" fill="url(#surface-fill)"/>
+    <rect x="70" y="40" width="18" height="1" fill="#000000" opacity="0.14"/>
+  </g>
+  <g id="left"><rect x="62" y="24" width="8" height="16" fill="url(#surface-fill)"/></g>
+  <g id="right"><rect x="88" y="24" width="8" height="16" fill="url(#surface-fill)"/></g>
+  <g id="topleft">
+    <path d="M70 24H62Q62 16 70 16V24Z" fill="url(#surface-fill)"/>
+    <path d="M70 16Q62 16 62 24" fill="none" stroke="url(#surface-edge)" stroke-width="1"/>
+  </g>
+  <g id="topright">
+    <path d="M88 24H96Q96 16 88 16V24Z" fill="url(#surface-fill)"/>
+    <path d="M88 16Q96 16 96 24" fill="none" stroke="url(#surface-edge)" stroke-width="1"/>
+  </g>
+  <g id="bottomleft"><path d="M70 40H62Q62 48 70 48V40Z" fill="url(#surface-fill)"/></g>
+  <g id="bottomright"><path d="M88 40H96Q96 48 88 48V40Z" fill="url(#surface-fill)"/></g>
+
+  <rect id="hint-top-margin" x="78" y="8" width="2" height="8" fill="#ff00ff"/>
+  <rect id="hint-bottom-margin" x="78" y="48" width="2" height="8" fill="#ff00ff"/>
+  <rect id="hint-left-margin" x="52" y="31" width="10" height="2" fill="#ff00ff"/>
+  <rect id="hint-right-margin" x="96" y="31" width="10" height="2" fill="#ff00ff"/>
+  <rect id="hint-top-inset" x="78" y="16" width="2" height="6" fill="#ff00ff"/>
+  <rect id="hint-bottom-inset" x="78" y="42" width="2" height="6" fill="#ff00ff"/>
+  <rect id="hint-left-inset" x="62" y="31" width="6" height="2" fill="#ff00ff"/>
+  <rect id="hint-right-inset" x="90" y="31" width="6" height="2" fill="#ff00ff"/>
+
+  <g id="mask-center"><rect x="70" y="24" width="18" height="16" fill="#ffffff"/></g>
+  <g id="mask-top"><rect x="70" y="16" width="18" height="8" fill="#ffffff"/></g>
+  <g id="mask-bottom"><rect x="70" y="40" width="18" height="8" fill="#ffffff"/></g>
+  <g id="mask-left"><rect x="62" y="24" width="8" height="16" fill="#ffffff"/></g>
+  <g id="mask-right"><rect x="88" y="24" width="8" height="16" fill="#ffffff"/></g>
+  <g id="mask-topleft"><path d="M70 24H62Q62 16 70 16V24Z" fill="#ffffff"/></g>
+  <g id="mask-topright"><path d="M88 24H96Q96 16 88 16V24Z" fill="#ffffff"/></g>
+  <g id="mask-bottomleft"><path d="M70 40H62Q62 48 70 48V40Z" fill="#ffffff"/></g>
+  <g id="mask-bottomright"><path d="M88 40H96Q96 48 88 48V40Z" fill="#ffffff"/></g>
+
+  <g id="shadow-center"><rect x="70" y="24" width="18" height="16" fill="#000000" opacity="0.02"/></g>
+  <g id="shadow-top"><rect x="70" y="10" width="18" height="6" fill="#000000" opacity="0.20"/></g>
+  <g id="shadow-bottom"><rect x="70" y="48" width="18" height="8" fill="#000000" opacity="0.24"/></g>
+  <g id="shadow-left"><rect x="56" y="24" width="6" height="16" fill="#000000" opacity="0.16"/></g>
+  <g id="shadow-right"><rect x="96" y="24" width="6" height="16" fill="#000000" opacity="0.16"/></g>
+  <g id="shadow-topleft"><circle cx="62" cy="16" r="6" fill="#000000" opacity="0.22"/></g>
+  <g id="shadow-topright"><circle cx="96" cy="16" r="6" fill="#000000" opacity="0.22"/></g>
+  <g id="shadow-bottomleft"><circle cx="62" cy="48" r="6" fill="#000000" opacity="0.20"/></g>
+  <g id="shadow-bottomright"><circle cx="96" cy="48" r="6" fill="#000000" opacity="0.20"/></g>
+
+  <rect id="shadow-hint-top-margin" x="78" y="2" width="2" height="8" fill="#ff00ff"/>
+  <rect id="shadow-hint-bottom-margin" x="78" y="56" width="2" height="6" fill="#ff00ff"/>
+  <rect id="shadow-hint-left-margin" x="50" y="31" width="6" height="2" fill="#ff00ff"/>
+  <rect id="shadow-hint-right-margin" x="102" y="31" width="6" height="2" fill="#ff00ff"/>
+  <rect id="shadow-hint-top-inset" x="78" y="10" width="2" height="6" fill="#ff00ff"/>
+  <rect id="shadow-hint-bottom-inset" x="78" y="48" width="2" height="8" fill="#ff00ff"/>
+  <rect id="shadow-hint-left-inset" x="56" y="31" width="6" height="2" fill="#ff00ff"/>
+  <rect id="shadow-hint-right-inset" x="96" y="31" width="6" height="2" fill="#ff00ff"/>
+</svg>

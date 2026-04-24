@@ -24,36 +24,76 @@ mkdir -p "$LOG_DIR"
 exec > >(tee -a "$LOG_FILE") 2>&1
 
 install_host_dependencies() {
-  local deps=(
-    ca-certificates
-    grub-common
-    grub-pc-bin
-    grub-efi-amd64-bin
-    grub2-common
-    mtools
-    dosfstools
-    squashfs-tools
+  local required_commands=(
+    grub-mkimage
+    grub-mkstandalone
+    mksquashfs
     xorriso
     rsync
+    mmd
+    mkfs.vfat
   )
-  local missing=()
-  local pkg
-  for pkg in "${deps[@]}"; do
-    if ! dpkg-query -W -f='${Status}\n' "$pkg" 2>/dev/null | grep -q "install ok installed"; then
-      missing+=("$pkg")
+  local missing_commands=()
+  local cmd
+
+  for cmd in "${required_commands[@]}"; do
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+      missing_commands+=("$cmd")
     fi
   done
-  if [[ "${#missing[@]}" -gt 0 ]]; then
-    echo "Installing missing host dependencies: ${missing[*]}"
-    export DEBIAN_FRONTEND=noninteractive
-    apt-get update
-    apt-get install -y --no-install-recommends "${missing[@]}"
+
+  if command -v apt-get >/dev/null 2>&1 && command -v dpkg-query >/dev/null 2>&1; then
+    local deps=(
+      ca-certificates
+      grub-common
+      grub-pc-bin
+      grub-efi-amd64-bin
+      grub2-common
+      mtools
+      dosfstools
+      squashfs-tools
+      xorriso
+      rsync
+    )
+    local missing=()
+    local pkg
+    for pkg in "${deps[@]}"; do
+      if ! dpkg-query -W -f='${Status}\n' "$pkg" 2>/dev/null | grep -q "install ok installed"; then
+        missing+=("$pkg")
+      fi
+    done
+    if [[ "${#missing[@]}" -gt 0 ]]; then
+      echo "Installing missing host dependencies: ${missing[*]}"
+      export DEBIAN_FRONTEND=noninteractive
+      apt-get update
+      apt-get install -y --no-install-recommends "${missing[@]}"
+    fi
+    return
   fi
+
+  if [[ "${#missing_commands[@]}" -eq 0 ]]; then
+    echo "Host repack dependencies already available; skipping package-manager install step"
+    return
+  fi
+
+  echo "Missing host commands: ${missing_commands[*]}"
+  if command -v pacman >/dev/null 2>&1; then
+    cat <<'EOF'
+This host does not provide apt-get, so install the repack tools with pacman first:
+  sudo pacman -S --needed grub mtools dosfstools squashfs-tools libisoburn rsync
+EOF
+  else
+    cat <<'EOF'
+This host does not provide apt-get. Install the missing commands with your system package manager,
+then rerun the repack.
+EOF
+  fi
+  exit 1
 }
 
 if [[ "$EUID" -ne 0 ]]; then
   echo "Run as root:"
-  echo "  wsl -u root bash -lc 'cd /mnt/c/Users/[USER]/Desktop/OS3 && ./build/repack-iso.sh'"
+  echo "  cd $PROJECT_ROOT && sudo ./build/repack-iso.sh"
   exit 1
 fi
 

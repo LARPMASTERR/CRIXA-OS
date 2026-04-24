@@ -1,10 +1,10 @@
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=CRIXA Store
-Comment=Install optional CRIXA apps
+Name=Foundry
+Comment=Install and manage CRIXA-curated applications
 Exec=crixa-store
-Icon=crixa-store
+Icon=system-software-install
 Terminal=false
 Categories=System;Utility;
 StartupNotify=true

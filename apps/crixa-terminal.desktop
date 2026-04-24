@@ -1,10 +1,10 @@
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=CRIXA Terminal
-Comment=Launch terminal
+Name=Console
+Comment=Command-line workspace powered by Konsole
 Exec=crixa-terminal
-Icon=crixa-terminal
+Icon=utilities-terminal
 Terminal=false
 Categories=System;TerminalEmulator;
 StartupNotify=false

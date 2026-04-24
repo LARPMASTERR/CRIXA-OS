@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Focus Ring
+Comment=Timer, breaks, and local focus history
+Exec=focus-ring
+Icon=focus-ring
+Categories=Utility;Productivity;
+Terminal=false

@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Prism Calc
+Comment=Calculator and unit converter
+Exec=prism-calc
+Icon=prism-calc
+Categories=Utility;Science;
+Terminal=false

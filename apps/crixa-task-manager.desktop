@@ -1,10 +1,10 @@
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=CRIXA Task Manager
-Comment=Live system monitor and process viewer
+Name=Pulse
+Comment=Live system metrics and process control
 Exec=crixa-task-manager
-Icon=crixa-task-manager
+Icon=utilities-system-monitor
 Terminal=false
 Categories=System;Monitor;
 StartupNotify=false

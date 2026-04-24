@@ -20,9 +20,9 @@ def parse_mode(text: str) -> str:
 class CrixaWaylandControl(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
-        self.title("CRIXA Wayland Track")
-        self.geometry("760x520")
-        self.minsize(680, 460)
+        self.title("Session Lab")
+        self.geometry("760x420")
+        self.minsize(680, 380)
         self.configure(bg="#081326")
 
         self.mode_var = tk.StringVar(value="x11")
@@ -34,10 +34,10 @@ class CrixaWaylandControl(tk.Tk):
         root = ttk.Frame(self)
         root.pack(fill="both", expand=True, padx=14, pady=14)
 
-        ttk.Label(root, text="CRIXA Wayland Migration Track", font=("DejaVu Sans", 15, "bold")).pack(anchor="w")
+        ttk.Label(root, text="Session Lab", font=("DejaVu Sans", 15, "bold")).pack(anchor="w")
         ttk.Label(
             root,
-            text="Default remains X11. Wayland mode is preview-only and enabled per login session config.",
+            text="Choose the default SDDM session for the next login. X11 stays the safer default; Wayland is available when you want it.",
         ).pack(anchor="w", pady=(4, 10))
 
         card = ttk.LabelFrame(root, text="Session Mode")
@@ -47,27 +47,17 @@ class CrixaWaylandControl(tk.Tk):
 
         row = ttk.Frame(card)
         row.grid(row=1, column=0, columnspan=2, sticky="ew", padx=12, pady=(8, 12))
-        ttk.Button(row, text="Use Stable X11", command=lambda: self.set_mode("x11")).pack(side="left", padx=(0, 8))
-        ttk.Button(row, text="Enable Wayland Preview", command=lambda: self.set_mode("wayland")).pack(side="left", padx=8)
+        ttk.Button(row, text="Use Plasma X11", command=lambda: self.set_mode("x11")).pack(side="left", padx=(0, 8))
+        ttk.Button(row, text="Use Plasma Wayland", command=lambda: self.set_mode("wayland")).pack(side="left", padx=8)
         ttk.Button(row, text="Refresh", command=self.refresh_status).pack(side="left", padx=8)
-
-        preview = ttk.LabelFrame(root, text="Immediate Preview")
-        preview.pack(fill="x", pady=(0, 10))
-        ttk.Label(
-            preview,
-            text="Run a nested Weston session in the current desktop for testing without changing login mode.",
-        ).pack(anchor="w", padx=12, pady=(10, 8))
-        btn_row = ttk.Frame(preview)
-        btn_row.pack(fill="x", padx=12, pady=(0, 12))
-        ttk.Button(btn_row, text="Launch Nested Weston", command=self.launch_nested_weston).pack(side="left")
 
         notes = ttk.LabelFrame(root, text="Notes")
         notes.pack(fill="both", expand=True)
         text = (
-            "1. X11 remains the default path and is recommended for stability.\n"
-            "2. Wayland preview mode changes LightDM user-session for next login.\n"
+            "1. Plasma X11 remains the default path and is recommended for VM stability.\n"
+            "2. Plasma Wayland updates the SDDM autologin session for the next login.\n"
             "3. After switching mode, log out or reboot to apply.\n"
-            "4. Use CRIXA Updater and Store as normal in either mode."
+            "4. CRIXA now boots directly into Plasma, so there is no separate custom Wayland shell to maintain."
         )
         label = tk.Label(
             notes,
@@ -88,32 +78,23 @@ class CrixaWaylandControl(tk.Tk):
             self.status_var.set("Failed to read session mode")
             return
         mode = parse_mode(result.stdout)
-        self.mode_var.set(mode)
-        self.status_var.set(f"Session mode: {mode}")
+        self.mode_var.set(self.mode_label(mode))
+        self.status_var.set(f"Session mode: {self.mode_label(mode)}")
 
     def set_mode(self, mode: str) -> None:
         result = run_cmd(["crixa-session-mode", "set", mode])
         if result.returncode != 0:
             details = (result.stderr or result.stdout).strip()
-            messagebox.showerror("Wayland Track", details or "Failed to set session mode.")
+            messagebox.showerror("Session Mode", details or "Failed to set session mode.")
             return
         self.refresh_status()
-        self.status_var.set(f"Session mode set to {mode}. Log out/reboot to apply.")
+        self.status_var.set(f"Next login will use {self.mode_label(mode)}.")
 
-    def launch_nested_weston(self) -> None:
-        cmd = [
-            "weston",
-            "--backend=x11-backend.so",
-            "--xwayland",
-            "--socket=wayland-crixa-preview",
-            "--width=1600",
-            "--height=900",
-        ]
-        try:
-            subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            self.status_var.set("Nested Weston launched")
-        except Exception as exc:
-            messagebox.showerror("Wayland Track", str(exc))
+    @staticmethod
+    def mode_label(mode: str) -> str:
+        if mode == "wayland":
+            return "Plasma Wayland"
+        return "Plasma X11"
 
 
 def main() -> int:

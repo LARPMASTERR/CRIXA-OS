@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 144 126" version="1.1" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="focus-fill" x1="0" y1="4" x2="0" y2="17" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#17263d" stop-opacity="0.98"/>
+      <stop offset="1" stop-color="#0d1829" stop-opacity="0.98"/>
+    </linearGradient>
+    <linearGradient id="hover-fill" x1="0" y1="4" x2="0" y2="17" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#142339" stop-opacity="0.82"/>
+      <stop offset="1" stop-color="#0c1626" stop-opacity="0.82"/>
+    </linearGradient>
+  </defs>
+
+  <g id="focus-center"><rect x="5" y="4" width="26" height="13" fill="url(#focus-fill)"/><rect x="5" y="4" width="26" height="1" fill="#6ec0ff" opacity="0.44"/></g>
+  <g id="focus-top"><rect x="5" y="1" width="26" height="3" fill="url(#focus-fill)"/><rect x="5" y="1" width="26" height="1" fill="#9fd8ff" opacity="0.55"/></g>
+  <g id="focus-bottom"><rect x="5" y="17" width="26" height="3" fill="url(#focus-fill)"/></g>
+  <g id="focus-left"><rect x="2" y="4" width="3" height="13" fill="url(#focus-fill)"/></g>
+  <g id="focus-right"><rect x="31" y="4" width="3" height="13" fill="url(#focus-fill)"/></g>
+  <g id="focus-topleft"><path d="M5 4H2Q2 1 5 1V4Z" fill="url(#focus-fill)"/><path d="M5 1Q2 1 2 4" fill="none" stroke="#9fd8ff" stroke-opacity="0.24" stroke-width="1"/></g>
+  <g id="focus-topright"><path d="M31 4H34Q34 1 31 1V4Z" fill="url(#focus-fill)"/><path d="M31 1Q34 1 34 4" fill="none" stroke="#9fd8ff" stroke-opacity="0.24" stroke-width="1"/></g>
+  <g id="focus-bottomleft"><path d="M5 17H2Q2 20 5 20V17Z" fill="url(#focus-fill)"/></g>
+  <g id="focus-bottomright"><path d="M31 17H34Q34 20 31 20V17Z" fill="url(#focus-fill)"/></g>
+
+  <g id="hover-center"><rect x="41" y="4" width="26" height="13" fill="url(#hover-fill)"/><rect x="41" y="4" width="26" height="1" fill="#ffffff" opacity="0.05"/></g>
+  <g id="hover-top"><rect x="41" y="1" width="26" height="3" fill="url(#hover-fill)"/></g>
+  <g id="hover-bottom"><rect x="41" y="17" width="26" height="3" fill="url(#hover-fill)"/></g>
+  <g id="hover-left"><rect x="38" y="4" width="3" height="13" fill="url(#hover-fill)"/></g>
+  <g id="hover-right"><rect x="67" y="4" width="3" height="13" fill="url(#hover-fill)"/></g>
+  <g id="hover-topleft"><path d="M41 4H38Q38 1 41 1V4Z" fill="url(#hover-fill)"/></g>
+  <g id="hover-topright"><path d="M67 4H70Q70 1 67 1V4Z" fill="url(#hover-fill)"/></g>
+  <g id="hover-bottomleft"><path d="M41 17H38Q38 20 41 20V17Z" fill="url(#hover-fill)"/></g>
+  <g id="hover-bottomright"><path d="M67 17H70Q70 20 67 20V17Z" fill="url(#hover-fill)"/></g>
+
+  <g id="north-focus-center" transform="translate(36 0)"><rect x="5" y="4" width="26" height="13" fill="url(#focus-fill)"/><rect x="5" y="16" width="26" height="1" fill="#6ec0ff" opacity="0.34"/></g>
+  <g id="north-focus-bottom" transform="translate(36 0)"><rect x="5" y="17" width="26" height="3" fill="url(#focus-fill)"/></g>
+  <g id="north-focus-top" transform="translate(36 0)"><rect x="5" y="1" width="26" height="3" fill="url(#focus-fill)"/></g>
+  <g id="north-focus-left" transform="translate(36 0)"><rect x="2" y="4" width="3" height="13" fill="url(#focus-fill)"/></g>
+  <g id="north-focus-right" transform="translate(36 0)"><rect x="31" y="4" width="3" height="13" fill="url(#focus-fill)"/></g>
+  <g id="north-focus-topleft" transform="translate(36 0)"><path d="M5 4H2Q2 1 5 1V4Z" fill="url(#focus-fill)"/></g>
+  <g id="north-focus-topright" transform="translate(36 0)"><path d="M31 4H34Q34 1 31 1V4Z" fill="url(#focus-fill)"/></g>
+  <g id="north-focus-bottomleft" transform="translate(36 0)"><path d="M5 17H2Q2 20 5 20V17Z" fill="url(#focus-fill)"/></g>
+  <g id="north-focus-bottomright" transform="translate(36 0)"><path d="M31 17H34Q34 20 31 20V17Z" fill="url(#focus-fill)"/></g>
+
+  <g id="west-focus-center" transform="translate(72 0) rotate(90 18 10.5)"><rect x="5" y="4" width="26" height="13" fill="url(#focus-fill)"/></g>
+  <g id="west-focus-top" transform="translate(72 0) rotate(90 18 10.5)"><rect x="5" y="1" width="26" height="3" fill="url(#focus-fill)"/></g>
+  <g id="west-focus-bottom" transform="translate(72 0) rotate(90 18 10.5)"><rect x="5" y="17" width="26" height="3" fill="url(#focus-fill)"/><rect x="5" y="17" width="26" height="1" fill="#6ec0ff" opacity="0.38"/></g>
+  <g id="west-focus-left" transform="translate(72 0) rotate(90 18 10.5)"><rect x="2" y="4" width="3" height="13" fill="url(#focus-fill)"/></g>
+  <g id="west-focus-right" transform="translate(72 0) rotate(90 18 10.5)"><rect x="31" y="4" width="3" height="13" fill="url(#focus-fill)"/></g>
+  <g id="west-focus-topleft" transform="translate(72 0) rotate(90 18 10.5)"><path d="M5 4H2Q2 1 5 1V4Z" fill="url(#focus-fill)"/></g>
+  <g id="west-focus-topright" transform="translate(72 0) rotate(90 18 10.5)"><path d="M31 4H34Q34 1 31 1V4Z" fill="url(#focus-fill)"/></g>
+  <g id="west-focus-bottomleft" transform="translate(72 0) rotate(90 18 10.5)"><path d="M5 17H2Q2 20 5 20V17Z" fill="url(#focus-fill)"/></g>
+  <g id="west-focus-bottomright" transform="translate(72 0) rotate(90 18 10.5)"><path d="M31 17H34Q34 20 31 20V17Z" fill="url(#focus-fill)"/></g>
+
+  <g id="east-focus-center" transform="translate(108 0) rotate(90 18 10.5)"><rect x="5" y="4" width="26" height="13" fill="url(#focus-fill)"/></g>
+  <g id="east-focus-top" transform="translate(108 0) rotate(90 18 10.5)"><rect x="5" y="1" width="26" height="3" fill="url(#focus-fill)"/><rect x="5" y="1" width="26" height="1" fill="#6ec0ff" opacity="0.38"/></g>
+  <g id="east-focus-bottom" transform="translate(108 0) rotate(90 18 10.5)"><rect x="5" y="17" width="26" height="3" fill="url(#focus-fill)"/></g>
+  <g id="east-focus-left" transform="translate(108 0) rotate(90 18 10.5)"><rect x="2" y="4" width="3" height="13" fill="url(#focus-fill)"/></g>
+  <g id="east-focus-right" transform="translate(108 0) rotate(90 18 10.5)"><rect x="31" y="4" width="3" height="13" fill="url(#focus-fill)"/></g>
+  <g id="east-focus-topleft" transform="translate(108 0) rotate(90 18 10.5)"><path d="M5 4H2Q2 1 5 1V4Z" fill="url(#focus-fill)"/></g>
+  <g id="east-focus-topright" transform="translate(108 0) rotate(90 18 10.5)"><path d="M31 4H34Q34 1 31 1V4Z" fill="url(#focus-fill)"/></g>
+  <g id="east-focus-bottomleft" transform="translate(108 0) rotate(90 18 10.5)"><path d="M5 17H2Q2 20 5 20V17Z" fill="url(#focus-fill)"/></g>
+  <g id="east-focus-bottomright" transform="translate(108 0) rotate(90 18 10.5)"><path d="M31 17H34Q34 20 31 20V17Z" fill="url(#focus-fill)"/></g>
+</svg>

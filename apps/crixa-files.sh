@@ -1,14 +1,19 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-if ! command -v thunar >/dev/null 2>&1; then
-  exit 1
+if command -v dolphin >/dev/null 2>&1; then
+  if [[ "$#" -gt 0 ]]; then
+    exec dolphin "$@"
+  fi
+  exec dolphin
 fi
 
-thunar --daemon >/dev/null 2>&1 || true
-
-if [[ "$#" -gt 0 ]]; then
-  exec thunar "$@"
+if command -v thunar >/dev/null 2>&1; then
+  thunar --daemon >/dev/null 2>&1 || true
+  if [[ "$#" -gt 0 ]]; then
+    exec thunar "$@"
+  fi
+  exec thunar
 fi
 
-exec thunar
+exit 1

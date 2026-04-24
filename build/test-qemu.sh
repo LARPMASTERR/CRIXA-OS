@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+is_wsl() {
+  grep -qiE "(microsoft|wsl)" /proc/version /proc/sys/kernel/osrelease 2>/dev/null
+}
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ISO_PATH="$PROJECT_ROOT/iso/CRIXA_OS_v0.iso"
@@ -67,7 +71,11 @@ if [[ "$KVM_OK" -ne 1 && "$REQUIRE_KVM" == "1" && "$HEADLESS" -eq 0 ]]; then
   echo "KVM acceleration is required for acceptable GUI performance."
   echo "Current mode would be TCG software emulation (very slow)."
   echo "Fix once: sudo $PROJECT_ROOT/build/fix-kvm-perms.sh $(id -un)"
-  echo "Then restart WSL from Windows PowerShell: wsl --shutdown"
+  if is_wsl; then
+    echo "Then restart WSL from Windows PowerShell: wsl --shutdown"
+  else
+    echo "Then log out and back in, reboot, or run: newgrp kvm"
+  fi
   echo "If you still want slow TCG mode, run with REQUIRE_KVM=0."
   exit 2
 fi

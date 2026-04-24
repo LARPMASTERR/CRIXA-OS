@@ -47,7 +47,7 @@ def version_key(version: str) -> tuple:
 class CrixaUpdater(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
-        self.title("CRIXA Updater")
+        self.title("Transit")
         self.geometry("980x700")
         self.minsize(860, 620)
         self.configure(bg="#0a162b")
@@ -69,7 +69,7 @@ class CrixaUpdater(tk.Tk):
 
         header = ttk.Frame(root)
         header.grid(row=0, column=0, columnspan=2, sticky="ew")
-        ttk.Label(header, text="CRIXA Atomic Updater", font=("DejaVu Sans", 15, "bold")).pack(side="left")
+        ttk.Label(header, text="Transit", font=("DejaVu Sans", 15, "bold")).pack(side="left")
         ttk.Button(header, text="Refresh", command=self.refresh_all).pack(side="right", padx=(8, 0))
         ttk.Button(header, text="Upgrade All", command=self.upgrade_all).pack(side="right", padx=(8, 0))
 
@@ -164,7 +164,7 @@ class CrixaUpdater(tk.Tk):
                 errors.append(str(exc))
         if errors:
             self.status_var.set("Refresh completed with warnings")
-            messagebox.showerror("CRIXA Updater", "\n".join(errors))
+            messagebox.showerror("Transit", "\n".join(errors))
             return
         self.status_var.set("Updater state refreshed")
 
@@ -232,7 +232,7 @@ class CrixaUpdater(tk.Tk):
             self.append_log(result.stderr.strip())
         if result.returncode != 0:
             self.status_var.set("Track switch failed")
-            messagebox.showerror("CRIXA Updater", "Failed to switch track. Check command log output.")
+            messagebox.showerror("Transit", "Failed to switch track. Check command log output.")
             return
 
         self.status_var.set(f"Track switched to {track}")
@@ -261,7 +261,7 @@ class CrixaUpdater(tk.Tk):
             self.append_log(result.stderr.strip())
         if result.returncode != 0:
             self.status_var.set("Upgrade failed")
-            messagebox.showerror("CRIXA Updater", "Upgrade failed. Check log output.")
+            messagebox.showerror("Transit", "Upgrade failed. Check log output.")
             return
         self.status_var.set("Upgrade completed")
         self.refresh_all()
@@ -270,7 +270,7 @@ class CrixaUpdater(tk.Tk):
         if not self.snapshots:
             return
         if not self.snapshots_list.curselection():
-            messagebox.showinfo("CRIXA Updater", "Select a snapshot first.")
+            messagebox.showinfo("Transit", "Select a snapshot first.")
             return
         idx = self.snapshots_list.curselection()[0]
         if idx < 0 or idx >= len(self.snapshots):
@@ -294,7 +294,7 @@ class CrixaUpdater(tk.Tk):
             self.append_log(result.stderr.strip())
         if result.returncode != 0:
             self.status_var.set("Rollback failed")
-            messagebox.showerror("CRIXA Updater", "Rollback failed. Check log output.")
+            messagebox.showerror("Transit", "Rollback failed. Check log output.")
             return
         self.status_var.set("Rollback completed")
         self.refresh_all()

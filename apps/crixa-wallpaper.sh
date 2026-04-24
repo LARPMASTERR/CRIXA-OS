@@ -5,7 +5,7 @@ CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 STATE_DIR="$CONFIG_HOME/crixa"
 STATE_FILE="$STATE_DIR/wallpaper.current"
 WALL_DIR="/usr/share/backgrounds/crixa"
-FALLBACK="/usr/share/backgrounds/crixa-wallpaper.jpg"
+FALLBACK="/usr/share/backgrounds/crixa/00-defaultwp.jpg"
 
 usage() {
   cat <<'EOF'
@@ -54,10 +54,41 @@ current_wallpaper() {
 
 apply_wallpaper() {
   local target="$1"
+  local qdbus_bin=""
+  local target_uri=""
+  local script=""
+
+  target="$(readlink -f "$target")"
   mkdir -p "$STATE_DIR"
   printf '%s\n' "$target" > "$STATE_FILE"
 
-  if [[ -n "${DISPLAY:-}" ]] && command -v feh >/dev/null 2>&1; then
+  if command -v plasma-apply-wallpaperimage >/dev/null 2>&1; then
+    plasma-apply-wallpaperimage "$target" >/dev/null 2>&1 || true
+  fi
+
+  if command -v qdbus >/dev/null 2>&1; then
+    qdbus_bin="qdbus"
+  elif command -v qdbus6 >/dev/null 2>&1; then
+    qdbus_bin="qdbus6"
+  fi
+
+  if [[ -n "$qdbus_bin" ]]; then
+    target_uri="file://$target"
+    script=$(cat <<EOF
+var desktopsArray = desktops();
+for (var i = 0; i < desktopsArray.length; i++) {
+    var desktop = desktopsArray[i];
+    desktop.wallpaperPlugin = "org.kde.image";
+    desktop.currentConfigGroup = ["Wallpaper", "org.kde.image", "General"];
+    desktop.writeConfig("Image", "$target_uri");
+    desktop.writeConfig("PreviewImage", "null");
+    desktop.writeConfig("FillMode", 2);
+}
+EOF
+)
+    "$qdbus_bin" org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript "$script" >/dev/null 2>&1 || \
+      "$qdbus_bin" org.kde.plasmashell /PlasmaShell evaluateScript "$script" >/dev/null 2>&1 || true
+  elif [[ -n "${DISPLAY:-}" ]] && command -v feh >/dev/null 2>&1; then
     feh --no-fehbg --bg-fill "$target" >/dev/null 2>&1 || true
   fi
   printf '%s\n' "$target"

@@ -17,7 +17,7 @@ TARGET_USER_PASSWORD=""
 
 usage() {
   cat <<'EOF'
-CRIXA Installer (live -> disk)
+Dockyard (live -> disk)
 
 Usage:
   crixa-install --target /dev/sdX [options]
@@ -142,7 +142,7 @@ confirm_destructive() {
     return
   fi
   echo
-  echo "CRIXA installer will ERASE all data on: $TARGET_DEV"
+  echo "Dockyard will ERASE all data on: $TARGET_DEV"
   echo "Type INSTALL to continue:"
   local response
   read -r response
@@ -216,12 +216,21 @@ tmpfs /tmp tmpfs defaults,nosuid,nodev 0 0"
   write_target_file "etc/hostname" "$HOSTNAME_VALUE"
   write_target_file "etc/hosts" "127.0.0.1 localhost
 127.0.1.1 $HOSTNAME_VALUE"
-  write_target_file "etc/lightdm/lightdm.conf.d/50-crixa-autologin.conf" "[Seat:*]
-autologin-user=$TARGET_USER
-autologin-user-timeout=0
-user-session=openbox
-greeter-hide-users=true
-allow-guest=false"
+  write_target_file "etc/sddm.conf.d/10-crixa.conf" "[General]
+DisplayServer=x11
+
+[Theme]
+Current=breeze
+CursorTheme=breeze_cursors
+EnableAvatars=false
+
+[Users]
+RememberLastSession=false
+RememberLastUser=false"
+  write_target_file "etc/sddm.conf.d/20-crixa-autologin.conf" "[Autologin]
+User=$TARGET_USER
+Session=plasma.desktop
+Relogin=false"
 
   if [[ "$DRY_RUN" -eq 1 ]]; then
     log "+ chroot user/service/boot configuration"
@@ -247,7 +256,9 @@ allow-guest=false"
   fi
 
   chroot "$TARGET_MOUNT" /bin/bash -lc "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends grub-common grub2-common grub-pc-bin grub-efi-amd64-bin || true"
-  chroot "$TARGET_MOUNT" /bin/bash -lc "systemctl enable NetworkManager bluetooth ModemManager lightdm || true"
+  chroot "$TARGET_MOUNT" /bin/bash -lc "rm -f /etc/lightdm/lightdm.conf.d/50-crixa-autologin.conf || true"
+  chroot "$TARGET_MOUNT" /bin/bash -lc "systemctl disable lightdm || true"
+  chroot "$TARGET_MOUNT" /bin/bash -lc "systemctl enable NetworkManager bluetooth ModemManager sddm || true"
   chroot "$TARGET_MOUNT" /bin/bash -lc "systemctl set-default graphical.target || true"
   chroot "$TARGET_MOUNT" /bin/bash -lc "update-initramfs -u -k all || true"
   chroot "$TARGET_MOUNT" /bin/bash -lc "grub-install --target=i386-pc '$TARGET_DEV' || true"
@@ -266,7 +277,7 @@ main() {
   chmod 0600 "$LOG_FILE" || true
   exec > >(tee -a "$LOG_FILE") 2>&1
 
-  log "Starting CRIXA install"
+  log "Starting Dockyard install"
   log "Target: $TARGET_DEV"
   log "Root partition: $TARGET_ROOT_PART"
   log "EFI partition: $TARGET_EFI_PART"
