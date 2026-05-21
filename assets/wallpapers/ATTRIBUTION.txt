@@ -1,53 +1,53 @@
-CRIXA OS v0 wallpaper source
-============================
+CRIXA OS wallpaper sources
+==========================
 
-File: earthrise_print.jpg
-Saved as: crixa-wallpaper.jpg
-Source URL:
-https://svs.gsfc.nasa.gov/vis/a000000/a004500/a004593/earthrise_print.jpg
+Default abstract wallpaper
+--------------------------
 
-Provider: NASA Scientific Visualization Studio
+File: Wallpapers/DefaultWP.jpeg
+Installed as:
+- /usr/share/backgrounds/crixa-wallpaper.jpg
+- /usr/share/backgrounds/crixa/00-defaultwp.jpg
+
+Source: CRIXA project asset.
+
+Minimal desktop collection
+--------------------------
+
+Saved as: crixa-wallpaper-mist-mountains.jpg
+Installed as: /usr/share/backgrounds/crixa/10-mist-mountains.jpg
 Source page:
-https://svs.gsfc.nasa.gov/4593
+https://unsplash.com/photos/a-view-of-a-mountain-range-in-the-fog-rQVOlHFFLzs
+Photographer: Stephen Coetsee
+License: Unsplash License
 
-Usage note:
-NASA imagery is generally public domain in the United States.
+Saved as: crixa-wallpaper-sand-ridges.jpg
+Installed as: /usr/share/backgrounds/crixa/20-sand-ridges.jpg
+Source page:
+https://unsplash.com/photos/sand-dune-7Y0NshQLohk
+Photographer: Sumner Mahaffey
+License: Unsplash License
 
-Additional wallpapers
-=====================
+Saved as: crixa-wallpaper-cloud-coast.jpg
+Installed as: /usr/share/backgrounds/crixa/30-cloud-coast.jpg
+Source page:
+https://unsplash.com/photos/overcast-sky-with-sunlight-reflecting-on-the-ocean-nk9e5KwmoqQ
+Photographer: Maria Lupan
+License: Unsplash License
 
-Saved as: crixa-wallpaper-orbit.jpg
-Source URL:
-https://images-assets.nasa.gov/image/PIA12235/PIA12235~orig.jpg
+Saved as: crixa-wallpaper-fog-ocean.jpg
+Installed as: /usr/share/backgrounds/crixa/40-fog-ocean.jpg
+Source page:
+https://unsplash.com/photos/calm-ocean-water-disappearing-into-thick-fog-ElYBGRbRKCc
+Photographer: Ricardo Resende
+License: Unsplash License
 
-Saved as: crixa-wallpaper-nebula.jpg
-Source URL:
-https://images-assets.nasa.gov/image/PIA18033/PIA18033~orig.jpg
+Saved as: crixa-wallpaper-snow-quiet.jpg
+Installed as: /usr/share/backgrounds/crixa/50-snow-quiet.jpg
+Source page:
+https://unsplash.com/photos/a-snow-covered-tree-on-top-of-a-snow-covered-hill-lMoDXok4p00
+Photographer: Greg Rosenke
+License: Unsplash License
 
-Saved as: crixa-wallpaper-planet.jpg
-Source URL:
-https://images-assets.nasa.gov/image/PIA03149/PIA03149~orig.jpg
-
-Saved as: crixa-wallpaper-saturn.jpg
-Source URL:
-https://images-assets.nasa.gov/image/PIA04921/PIA04921~orig.jpg
-
-Saved as: crixa-wallpaper-jupiter.jpg
-Source URL:
-https://images-assets.nasa.gov/image/PIA07929/PIA07929~orig.jpg
-
-Saved as: crixa-wallpaper-aurora.jpg
-Source URL:
-https://images-assets.nasa.gov/image/PIA00342/PIA00342~orig.jpg
-
-Saved as: crixa-wallpaper-rings.jpg
-Source URL:
-https://images-assets.nasa.gov/image/PIA12234/PIA12234~orig.jpg
-
-Saved as: crixa-wallpaper-uranus.jpg
-Source URL:
-https://images-assets.nasa.gov/image/PIA18182/PIA18182~orig.jpg
-
-Provider:
-NASA Image and Video Library
-https://images.nasa.gov/
+License reference:
+https://unsplash.com/license

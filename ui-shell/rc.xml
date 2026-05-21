@@ -77,7 +77,7 @@
 
     <keybind key="C-A-space">
       <action name="Execute">
-        <command>rofi -show drun -show-icons</command>
+        <command>crixa-menu</command>
       </action>
     </keybind>
 
@@ -89,7 +89,7 @@
 
     <keybind key="A-F1">
       <action name="Execute">
-        <command>rofi -show drun -show-icons</command>
+        <command>crixa-menu</command>
       </action>
     </keybind>
 
@@ -107,7 +107,7 @@
 
     <keybind key="W-space">
       <action name="Execute">
-        <command>rofi -show drun -show-icons</command>
+        <command>crixa-menu</command>
       </action>
     </keybind>
 

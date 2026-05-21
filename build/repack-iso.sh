@@ -107,12 +107,18 @@ echo "Using rootfs: $ROOTFS_DIR"
 
 install_host_dependencies
 
+SYNC_APT="${SYNC_ENABLE_APT:-0}"
+if ! chroot "$ROOTFS_DIR" /bin/bash -lc "dpkg -s python3-pyside2.qtwidgets >/dev/null 2>&1"; then
+  echo "Rootfs missing python3-pyside2.qtwidgets; enabling package refresh for Orbit"
+  SYNC_APT=1
+fi
+
 mkdir -p "$ISO_DIR"
 rm -rf "$WORK_DIR"
 mkdir -p "$LIVE_DIR" "$ISO_STAGING_DIR/boot/grub/i386-pc" "$ISO_STAGING_DIR/EFI/boot"
 
 echo "Refreshing rootfs content from project files"
-ROOTFS_DIR="$ROOTFS_DIR" SYNC_ENABLE_APT=0 "$SCRIPT_DIR/sync-rootfs.sh"
+ROOTFS_DIR="$ROOTFS_DIR" SYNC_ENABLE_APT="$SYNC_APT" "$SCRIPT_DIR/sync-rootfs.sh"
 
 echo "Preparing live filesystem"
 chroot "$ROOTFS_DIR" /bin/bash -lc "dpkg-query -W --showformat='\${Package} \${Version}\n'" > "$LIVE_DIR/filesystem.manifest"

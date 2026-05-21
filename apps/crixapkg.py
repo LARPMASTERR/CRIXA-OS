@@ -14,11 +14,13 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-REPO_ROOT = Path("/usr/share/crixa-repo")
+DEFAULT_REPO_ROOT = Path("/usr/share/crixa-repo")
+REPO_ROOT = DEFAULT_REPO_ROOT
 REPO_METADATA = REPO_ROOT / "metadata" / "repo.json"
 REPO_SIGNATURE = REPO_ROOT / "metadata" / "repo.sig"
 REPO_PUBLIC_KEY = REPO_ROOT / "keys" / "repo-public.pem"
 
+ACTIVE_SCOPE = "user"
 LOCAL_PREFIX = Path.home() / ".local"
 STATE_HOME = Path(os.environ.get("XDG_STATE_HOME", str(LOCAL_PREFIX / "state"))) / "crixapkg"
 STATE_FILE = STATE_HOME / "installed.json"
@@ -32,6 +34,38 @@ TARGET_MAP = {
     "lib": LOCAL_PREFIX / "lib",
     "share": LOCAL_PREFIX / "share",
 }
+
+SYSTEM_PREFIX = Path("/usr/local")
+SYSTEM_STATE_HOME = Path("/var/lib/crixapkg")
+
+
+def configure_repo(repo_root: str | None) -> None:
+    global REPO_ROOT, REPO_METADATA, REPO_SIGNATURE, REPO_PUBLIC_KEY
+    root = Path(repo_root).expanduser() if repo_root else DEFAULT_REPO_ROOT
+    REPO_ROOT = root
+    REPO_METADATA = REPO_ROOT / "metadata" / "repo.json"
+    REPO_SIGNATURE = REPO_ROOT / "metadata" / "repo.sig"
+    REPO_PUBLIC_KEY = REPO_ROOT / "keys" / "repo-public.pem"
+
+
+def configure_scope(scope: str) -> None:
+    global ACTIVE_SCOPE, LOCAL_PREFIX, STATE_HOME, STATE_FILE, SNAPSHOT_ROOT, TARGET_MAP
+    ACTIVE_SCOPE = "system" if scope == "system" else "user"
+    if ACTIVE_SCOPE == "system":
+        LOCAL_PREFIX = SYSTEM_PREFIX
+        STATE_HOME = SYSTEM_STATE_HOME
+    else:
+        LOCAL_PREFIX = Path.home() / ".local"
+        STATE_HOME = Path(os.environ.get("XDG_STATE_HOME", str(LOCAL_PREFIX / "state"))) / "crixapkg"
+    TARGET_MAP = {
+        "bin": LOCAL_PREFIX / "bin",
+        "applications": LOCAL_PREFIX / "share" / "applications",
+        "icons": LOCAL_PREFIX / "share" / "icons",
+        "lib": LOCAL_PREFIX / "lib",
+        "share": LOCAL_PREFIX / "share",
+    }
+    STATE_FILE = STATE_HOME / "installed.json"
+    SNAPSHOT_ROOT = STATE_HOME / "snapshots"
 
 
 def load_json(path: Path, default: dict) -> dict:
@@ -122,9 +156,18 @@ def package_index(repo: dict) -> dict[str, dict]:
     return indexed
 
 
-def ensure_within_home(path: Path) -> bool:
+def ensure_within_scope(path: Path) -> bool:
     try:
-        return path.resolve().is_relative_to(Path.home().resolve())
+        resolved = path.resolve()
+        if ACTIVE_SCOPE == "system":
+            roots = [
+                (SYSTEM_PREFIX / "bin").resolve(),
+                (SYSTEM_PREFIX / "lib").resolve(),
+                (SYSTEM_PREFIX / "share").resolve(),
+            ]
+        else:
+            roots = [LOCAL_PREFIX.resolve()]
+        return any(resolved.is_relative_to(root) for root in roots)
     except Exception:
         return False
 
@@ -136,6 +179,9 @@ def refresh_caches() -> None:
         subprocess.run(["update-desktop-database", str(apps_dir)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
     if icon_dir.exists():
         subprocess.run(["gtk-update-icon-cache", "-f", str(icon_dir)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+    if ACTIVE_SCOPE == "system":
+        subprocess.run(["update-desktop-database", "/usr/local/share/applications"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+        subprocess.run(["gtk-update-icon-cache", "-f", "/usr/local/share/icons/hicolor"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
 
 
 def copy_payload(payload_root: Path) -> list[str]:
@@ -185,7 +231,7 @@ def managed_files_from_state(data: dict) -> list[Path]:
             continue
         for item in entries:
             path = Path(str(item))
-            if ensure_within_home(path):
+            if ensure_within_scope(path):
                 files.append(path)
     # Remove duplicates while preserving relative order.
     seen: set[str] = set()
@@ -203,7 +249,7 @@ def remove_installed_files(files: list[Path]) -> None:
     # Delete deepest paths first to reduce directory cleanup churn.
     ordered = sorted(files, key=lambda path: len(str(path)), reverse=True)
     for path in ordered:
-        if not ensure_within_home(path):
+        if not ensure_within_scope(path):
             continue
         try:
             if path.exists():
@@ -283,6 +329,7 @@ def install_app(app_id: str, force: bool = False, no_verify: bool = False) -> di
         "files": files,
         "archive": pkg_file,
         "sha256": actual_hash,
+        "scope": ACTIVE_SCOPE,
     }
     save_json(STATE_FILE, data)
     refresh_caches()
@@ -302,6 +349,7 @@ def installed_as_list(data: dict) -> list[dict]:
                 "entrypoint": payload.get("entrypoint", ""),
                 "installed_at": payload.get("installed_at", ""),
                 "files": payload.get("files", []),
+                "scope": payload.get("scope", ACTIVE_SCOPE),
             }
         )
     return out
@@ -321,7 +369,7 @@ def create_snapshot(reason: str, data: dict | None = None) -> str:
     files_dir.mkdir(parents=True, exist_ok=True)
 
     tracked = managed_files_from_state(current)
-    home = Path.home().resolve()
+    scope_root = LOCAL_PREFIX.resolve()
     copied = 0
     for path in tracked:
         try:
@@ -331,7 +379,7 @@ def create_snapshot(reason: str, data: dict | None = None) -> str:
         if not src.exists():
             continue
         try:
-            rel = src.relative_to(home)
+            rel = src.relative_to(scope_root)
         except Exception:
             continue
         dst = files_dir / rel
@@ -371,14 +419,17 @@ def restore_snapshot(snap_id: str) -> dict:
     # Remove all files currently managed by crixapkg before restoring snapshot files.
     remove_installed_files(managed_files_from_state(current_state))
 
-    home = Path.home().resolve()
+    scope_root = LOCAL_PREFIX.resolve()
     restored = 0
     if files_dir.is_dir():
         for src in files_dir.rglob("*"):
             if src.is_dir():
                 continue
             rel = src.relative_to(files_dir)
-            dst = home / rel
+            if ACTIVE_SCOPE == "user" and rel.parts and rel.parts[0] == ".local":
+                dst = Path.home() / rel
+            else:
+                dst = scope_root / rel
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src, dst)
             restored += 1
@@ -598,6 +649,14 @@ def cmd_rollback(args: argparse.Namespace) -> int:
     return 0
 
 
+def add_scope_arg(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--scope", choices=("user", "system"), default="user", help="installation scope")
+
+
+def add_repo_arg(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--repo-root", help="signed repository root to use")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="crixapkg",
@@ -607,15 +666,18 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_verify = sub.add_parser("verify", help="verify repo metadata signature")
     p_verify.add_argument("--json", action="store_true")
+    add_repo_arg(p_verify)
     p_verify.set_defaults(func=cmd_verify)
 
     p_list = sub.add_parser("list", help="list available packages")
     p_list.add_argument("--json", action="store_true")
     p_list.add_argument("--no-verify", action="store_true", help="skip signature verification")
+    add_repo_arg(p_list)
     p_list.set_defaults(func=cmd_list)
 
     p_installed = sub.add_parser("installed", help="list installed packages")
     p_installed.add_argument("--json", action="store_true")
+    add_scope_arg(p_installed)
     p_installed.set_defaults(func=cmd_installed)
 
     p_install = sub.add_parser("install", help="install a package by id")
@@ -623,26 +685,33 @@ def build_parser() -> argparse.ArgumentParser:
     p_install.add_argument("--force", action="store_true")
     p_install.add_argument("--json", action="store_true")
     p_install.add_argument("--no-verify", action="store_true", help="skip signature verification")
+    add_scope_arg(p_install)
+    add_repo_arg(p_install)
     p_install.set_defaults(func=cmd_install)
 
     p_remove = sub.add_parser("remove", help="remove an installed package")
     p_remove.add_argument("package_id")
     p_remove.add_argument("--json", action="store_true")
+    add_scope_arg(p_remove)
     p_remove.set_defaults(func=cmd_remove)
 
     p_upgrade = sub.add_parser("upgrade", help="upgrade installed packages to latest repo versions")
     p_upgrade.add_argument("--json", action="store_true")
     p_upgrade.add_argument("--no-verify", action="store_true", help="skip signature verification")
+    add_scope_arg(p_upgrade)
+    add_repo_arg(p_upgrade)
     p_upgrade.set_defaults(func=cmd_upgrade)
 
     p_history = sub.add_parser("history", help="show transaction snapshots")
     p_history.add_argument("--json", action="store_true")
     p_history.add_argument("--limit", type=int, default=30)
+    add_scope_arg(p_history)
     p_history.set_defaults(func=cmd_history)
 
     p_rollback = sub.add_parser("rollback", help="rollback to a snapshot id or 'latest'")
     p_rollback.add_argument("snapshot_id", help="snapshot id or 'latest'")
     p_rollback.add_argument("--json", action="store_true")
+    add_scope_arg(p_rollback)
     p_rollback.set_defaults(func=cmd_rollback)
 
     return parser
@@ -651,6 +720,8 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
+    configure_scope(getattr(args, "scope", "user"))
+    configure_repo(getattr(args, "repo_root", None))
     return int(args.func(args))
 
 

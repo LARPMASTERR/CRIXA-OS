@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Welcome
+Comment=Start with CRIXA tools, setup, apps, and updates
+Exec=crixa-welcome --force
+Icon=crixa-launcher
+Terminal=false
+Categories=System;Utility;
+StartupNotify=true

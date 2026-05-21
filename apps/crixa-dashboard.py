@@ -1,48 +1,50 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import argparse
 import configparser
+import json
 import os
 import shlex
 import subprocess
 import sys
-import tkinter as tk
-from tkinter import messagebox
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-DESKTOP_DIRS = [
-    Path.home() / ".local" / "share" / "applications",
-    Path("/usr/local/share/applications"),
-    Path("/usr/share/applications"),
-]
+try:
+    from PySide2 import QtCore, QtGui, QtWidgets
 
-FEATURED_IDS = [
+    QT_IMPORT_ERROR: Exception | None = None
+except Exception as exc:  # pragma: no cover - exercised by runtime fallback.
+    QtCore = None
+    QtGui = None
+    QtWidgets = None
+    QT_IMPORT_ERROR = exc
+
+
+APP_NAME = "Orbit"
+RECENT_LIMIT = 12
+RECENT_PATH = (
+    Path(os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local" / "share")))
+    / "crixa"
+    / "orbit"
+    / "recent.json"
+)
+
+DEV_ROOT = Path(__file__).resolve().parents[1] if Path(__file__).resolve().parent.name == "apps" else None
+
+PINNED_IDS = [
+    "crixa-welcome.desktop",
     "crixa-browser.desktop",
     "crixa-files.desktop",
     "crixa-terminal.desktop",
     "crixa-store.desktop",
     "crixa-settings.desktop",
+    "crixa-task-manager.desktop",
     "crixa-updater.desktop",
+    "crixa-wallpapers.desktop",
 ]
-
-SYSTEM_ACTIONS = [
-    ("Bridge", "System controls, appearance, and hardware settings", ["crixa-settings"]),
-    ("Foundry", "Install or remove CRIXA-curated applications", ["crixa-store"]),
-    ("Pulse", "Inspect processes, services, and live system load", ["crixa-task-manager"]),
-    ("Transit", "Manage updates, tracks, and rollback snapshots", ["crixa-updater"]),
-    ("Backdrop", "Browse the installed wallpaper collection", ["crixa-files", "/usr/share/backgrounds/crixa"]),
-]
-
-POWER_ACTIONS = [
-    ("Lock", "Lock this session", ["loginctl", "lock-session"]),
-    ("Sleep", "Suspend the system", ["systemctl", "suspend"]),
-    ("Restart", "Reboot now", ["systemctl", "reboot"]),
-    ("Power Off", "Shut the system down", ["systemctl", "poweroff"]),
-]
-
-DEV_ROOT = Path(__file__).resolve().parents[1] if Path(__file__).resolve().parent.name == "apps" else None
 
 
 @dataclass(slots=True)
@@ -51,26 +53,157 @@ class DesktopApp:
     name: str
     comment: str
     exec_line: str
+    icon: str
+    categories: tuple[str, ...]
+    keywords: tuple[str, ...]
     path: Path
+    try_exec: str
 
 
-def _desktop_dirs() -> list[Path]:
-    dirs: list[Path] = []
-    for path in DESKTOP_DIRS:
-        if path.exists():
-            dirs.append(path)
-    return dirs
+@dataclass(frozen=True, slots=True)
+class ActionSpec:
+    action_id: str
+    title: str
+    subtitle: str
+    command: tuple[str, ...]
+    icon: str
+    group: str
 
 
-def _bool_value(raw: str) -> bool:
+@dataclass(frozen=True, slots=True)
+class CommandItem:
+    item_id: str
+    title: str
+    subtitle: str
+    icon: str
+    kind: str
+    app: DesktopApp | None = None
+    command: tuple[str, ...] = ()
+
+
+ACTION_SPECS = [
+    ActionSpec("bridge", "Bridge", "System controls, appearance, and hardware", ("crixa-settings",), "preferences-system", "System"),
+    ActionSpec("foundry", "Foundry", "Install and manage CRIXA apps", ("crixa-store",), "system-software-install", "System"),
+    ActionSpec("pulse", "Pulse", "Processes, services, and live system load", ("crixa-task-manager",), "utilities-system-monitor", "System"),
+    ActionSpec("transit", "Transit", "Updates, tracks, and rollback snapshots", ("crixa-updater",), "system-software-update", "System"),
+    ActionSpec(
+        "backdrop",
+        "Backdrop",
+        "Browse the installed wallpaper collection",
+        ("crixa-files", "/usr/share/backgrounds/crixa"),
+        "preferences-desktop-wallpaper",
+        "System",
+    ),
+    ActionSpec("lock", "Lock", "Lock this session", ("loginctl", "lock-session"), "system-lock-screen", "Power"),
+    ActionSpec("sleep", "Sleep", "Suspend this system", ("systemctl", "suspend"), "system-suspend", "Power"),
+    ActionSpec("restart", "Restart", "Reboot now", ("systemctl", "reboot"), "system-reboot", "Power"),
+    ActionSpec("poweroff", "Power Off", "Shut down this system", ("systemctl", "poweroff"), "system-shutdown", "Power"),
+]
+
+
+def bool_value(raw: str) -> bool:
     return raw.strip().lower() in {"1", "true", "yes"}
 
 
-def _load_desktop_file(path: Path) -> DesktopApp | None:
+def split_desktop_list(raw: str) -> tuple[str, ...]:
+    return tuple(part.strip() for part in raw.split(";") if part.strip())
+
+
+def build_path(extra_bin_dirs: list[Path] | None = None) -> str:
+    entries = [
+        *(str(path) for path in extra_bin_dirs or []),
+        str(Path.home() / ".local" / "bin"),
+        "/usr/local/bin",
+        "/usr/bin",
+        "/bin",
+    ]
+    if DEV_ROOT is not None:
+        entries.append(str(DEV_ROOT / "apps"))
+    current = os.environ.get("PATH", "")
+    if current:
+        entries.extend(current.split(os.pathsep))
+
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for entry in entries:
+        if entry and entry not in seen:
+            seen.add(entry)
+            deduped.append(entry)
+    return os.pathsep.join(deduped)
+
+
+def find_executable(program: str, path_value: str | None = None) -> str | None:
+    if not program:
+        return None
+    if "/" in program:
+        candidate = Path(program)
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+        return None
+    for directory in (path_value or build_path()).split(os.pathsep):
+        if not directory:
+            continue
+        candidate = Path(directory) / program
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return resolve_dev_command(program)
+
+
+def resolve_dev_command(program: str) -> str | None:
+    if DEV_ROOT is None or "/" in program:
+        return None
+    for suffix in ("", ".sh", ".py"):
+        candidate = DEV_ROOT / "apps" / f"{program}{suffix}"
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return None
+
+
+def desktop_dirs(explicit_dirs: list[Path] | None = None) -> list[Path]:
+    if explicit_dirs:
+        return [path for path in explicit_dirs if path.exists()]
+
+    env_dirs = os.environ.get("ORBIT_DESKTOP_DIRS")
+    if env_dirs:
+        return [Path(part) for part in env_dirs.split(os.pathsep) if part and Path(part).exists()]
+
+    dirs: list[Path] = []
+    if DEV_ROOT is not None:
+        dirs.append(DEV_ROOT / "apps")
+
+    data_home = Path(os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local" / "share")))
+    dirs.append(data_home / "applications")
+
+    data_dirs = os.environ.get("XDG_DATA_DIRS", "/usr/local/share:/usr/share")
+    for raw in data_dirs.split(":"):
+        if raw:
+            dirs.append(Path(raw) / "applications")
+
+    deduped: list[Path] = []
+    seen: set[Path] = set()
+    for path in dirs:
+        resolved = path.expanduser()
+        if resolved.exists() and resolved not in seen:
+            seen.add(resolved)
+            deduped.append(resolved)
+    return deduped
+
+
+def try_exec_available(raw: str, path_value: str) -> bool:
+    if not raw.strip():
+        return True
+    try:
+        executable = shlex.split(raw)[0]
+    except ValueError:
+        executable = raw.split()[0] if raw.split() else ""
+    return find_executable(executable, path_value) is not None
+
+
+def load_desktop_file(path: Path, path_value: str) -> DesktopApp | None:
     parser = configparser.ConfigParser(interpolation=None, strict=False)
     parser.optionxform = str
     try:
-        with path.open("r", encoding="utf-8") as handle:
+        with path.open("r", encoding="utf-8", errors="replace") as handle:
             parser.read_file(handle)
     except Exception:
         return None
@@ -81,9 +214,9 @@ def _load_desktop_file(path: Path) -> DesktopApp | None:
     entry = parser["Desktop Entry"]
     if entry.get("Type", "").strip() != "Application":
         return None
-    if _bool_value(entry.get("NoDisplay", "false")):
+    if bool_value(entry.get("Hidden", "false")):
         return None
-    if _bool_value(entry.get("Hidden", "false")):
+    if bool_value(entry.get("NoDisplay", "false")):
         return None
 
     name = entry.get("Name", "").strip()
@@ -91,586 +224,779 @@ def _load_desktop_file(path: Path) -> DesktopApp | None:
     if not name or not exec_line:
         return None
 
+    try_exec = entry.get("TryExec", "").strip()
+    if try_exec and not try_exec_available(try_exec, path_value):
+        return None
+
     return DesktopApp(
         desktop_id=path.name,
         name=name,
-        comment=entry.get("Comment", "").strip(),
+        comment=entry.get("Comment", "").strip() or entry.get("GenericName", "").strip(),
         exec_line=exec_line,
+        icon=entry.get("Icon", "").strip(),
+        categories=split_desktop_list(entry.get("Categories", "")),
+        keywords=split_desktop_list(entry.get("Keywords", "")),
         path=path,
+        try_exec=try_exec,
     )
 
 
-def load_apps() -> list[DesktopApp]:
+def load_apps(explicit_dirs: list[Path] | None = None, path_value: str | None = None) -> list[DesktopApp]:
+    resolved_path = path_value or build_path()
     discovered: dict[str, DesktopApp] = {}
-    for directory in _desktop_dirs():
+    for directory in desktop_dirs(explicit_dirs):
         for path in sorted(directory.glob("*.desktop")):
-            app = _load_desktop_file(path)
-            if app and app.desktop_id not in discovered:
+            if path.name in discovered:
+                continue
+            app = load_desktop_file(path, resolved_path)
+            if app is not None:
                 discovered[app.desktop_id] = app
     return sorted(discovered.values(), key=lambda app: app.name.lower())
 
 
-def desktop_exec_fallback(exec_line: str) -> list[str]:
+def command_for_desktop_exec(exec_line: str) -> list[str]:
     command: list[str] = []
-    for token in shlex.split(exec_line):
-        if token.startswith("%"):
+    try:
+        tokens = shlex.split(exec_line)
+    except ValueError:
+        return command
+
+    field_codes = {"%f", "%F", "%u", "%U", "%d", "%D", "%n", "%N", "%i", "%c", "%k", "%v", "%m"}
+    for token in tokens:
+        if token in field_codes:
             continue
-        if "%" in token:
-            token = token.replace("%%", "%")
-            if "%" in token:
-                continue
-        command.append(token)
+        cleaned = token.replace("%%", "\0")
+        for code in field_codes:
+            cleaned = cleaned.replace(code, "")
+        cleaned = cleaned.replace("\0", "%").strip()
+        if cleaned:
+            command.append(cleaned)
     return command
 
 
-class OrbitDashboard(tk.Tk):
-    def __init__(self) -> None:
-        super().__init__()
-        self.title("Orbit")
-        self.configure(bg="#050a11")
-
-        self.apps = load_apps()
-        self.app_map = {app.desktop_id: app for app in self.apps}
-        self.filtered_apps: list[DesktopApp] = []
-
-        self.search_var = tk.StringVar()
-        self.search_var.trace_add("write", lambda *_: self.refresh_results())
-        self.clock_var = tk.StringVar()
-        self.date_var = tk.StringVar()
-        self.summary_var = tk.StringVar()
-
-        self.palette = {
-            "overlay": "#080a0d",
-            "shell": "#111418",
-            "surface": "#191f24",
-            "surface_alt": "#20282e",
-            "surface_soft": "#26323a",
-            "stroke": "#34424a",
-            "stroke_bright": "#4b626d",
-            "accent": "#35c9ba",
-            "accent_soft": "#1d706a",
-            "text": "#eef4f2",
-            "muted": "#a3b1af",
-            "subtle": "#7f8f8d",
-            "warm": "#f2b84b",
-        }
-
-        self._configure_window()
-        self._build_shell()
-        self._tick_clock()
-        self.refresh_results()
-        self.after(50, self._focus_search)
-
-    def _set_surface_state(self, widgets: list[tk.Widget], background: str) -> None:
-        for widget in widgets:
-            try:
-                widget.configure(bg=background)
-            except tk.TclError:
-                continue
-
-    def _bind_click_tree(
-        self,
-        widget: tk.Widget,
-        launch,
-        hover_widgets: list[tk.Widget],
-        normal_bg: str,
-        hover_bg: str,
-    ) -> None:
-        widget.bind("<Button-1>", launch)
-        widget.bind("<Enter>", lambda _event, target=hover_widgets: self._set_surface_state(target, hover_bg))
-        widget.bind("<Leave>", lambda _event, target=hover_widgets: self._set_surface_state(target, normal_bg))
-        for child in widget.winfo_children():
-            self._bind_click_tree(child, launch, hover_widgets, normal_bg, hover_bg)
-
-    def _configure_window(self) -> None:
-        self.overrideredirect(True)
-        self.attributes("-topmost", True)
-        try:
-            self.wm_attributes("-type", "dialog")
-        except tk.TclError:
-            pass
-
-        self.bind("<Escape>", lambda _event: self.close())
-        self.bind("<Return>", self._launch_default_selection)
-        self.bind("<Down>", lambda _event: self._move_results(1))
-        self.bind("<Up>", lambda _event: self._move_results(-1))
-
-    def _build_shell(self) -> None:
-        screen_w = self.winfo_screenwidth()
-        screen_h = self.winfo_screenheight()
-        self.compact = screen_w < 1180
-        shell_w = min(1480, max(760, screen_w - 72))
-        shell_h = min(900, max(600, screen_h - 72))
-        if shell_w > screen_w - 32:
-            shell_w = max(720, screen_w - 32)
-        if shell_h > screen_h - 32:
-            shell_h = max(560, screen_h - 32)
-        self.shell_w = shell_w
-        self.shell_h = shell_h
-        self.content_wrap = max(180, min(560, int(shell_w * 0.42)))
-        self.card_wrap = 190 if self.compact else 250
-
-        x = max(12, (screen_w - shell_w) // 2)
-        y = max(12, (screen_h - shell_h) // 2)
-        self.geometry(f"{shell_w}x{shell_h}+{x}+{y}")
-
-        self.shell = tk.Frame(
-            self,
-            bg=self.palette["shell"],
-            highlightbackground=self.palette["stroke_bright"],
-            highlightcolor=self.palette["stroke_bright"],
-            highlightthickness=1,
-            bd=0,
-        )
-        self.shell.pack(fill="both", expand=True)
-        self.shell.grid_columnconfigure(1, weight=1)
-        self.shell.grid_rowconfigure(1, weight=1)
-
-        header = tk.Frame(self.shell, bg=self.palette["surface"], height=104)
-        header.grid(row=0, column=0, columnspan=3, sticky="ew", padx=16, pady=(16, 10))
-        header.grid_columnconfigure(1, weight=1)
-        header.grid_propagate(False)
-
-        brand = tk.Frame(header, bg=self.palette["surface"])
-        brand.grid(row=0, column=0, sticky="nsw", padx=(18, 16), pady=16)
-
-        tk.Label(
-            brand,
-            text="Orbit",
-            bg=self.palette["surface"],
-            fg=self.palette["text"],
-            font=("Helvetica", 22, "bold"),
-        ).pack(anchor="w")
-        tk.Label(
-            brand,
-            text="Search, launch, and steer the system from one dashboard.",
-            bg=self.palette["surface"],
-            fg=self.palette["muted"],
-            font=("Helvetica", 9),
-        ).pack(anchor="w", pady=(4, 0))
-
-        search_wrap = tk.Frame(
-            header,
-            bg=self.palette["surface_alt"],
-            highlightbackground=self.palette["stroke"],
-            highlightthickness=1,
-        )
-        search_wrap.grid(row=0, column=1, sticky="ew", padx=(0, 14), pady=18)
-        search_wrap.grid_columnconfigure(0, weight=1)
-
-        self.search_entry = tk.Entry(
-            search_wrap,
-            textvariable=self.search_var,
-            relief="flat",
-            bd=0,
-            bg=self.palette["surface_alt"],
-            fg=self.palette["text"],
-            insertbackground=self.palette["accent"],
-            selectbackground=self.palette["accent_soft"],
-            selectforeground=self.palette["text"],
-            font=("Helvetica", 13),
-        )
-        self.search_entry.grid(row=0, column=0, sticky="ew", padx=14, pady=10)
-
-        header_meta = tk.Frame(header, bg=self.palette["surface"])
-        header_meta.grid(row=0, column=2, sticky="nse", padx=(0, 18), pady=16)
-        tk.Label(
-            header_meta,
-            textvariable=self.clock_var,
-            bg=self.palette["surface"],
-            fg=self.palette["text"],
-            font=("Helvetica", 15, "bold"),
-        ).pack(anchor="e")
-        tk.Label(
-            header_meta,
-            textvariable=self.date_var,
-            bg=self.palette["surface"],
-            fg=self.palette["muted"],
-            font=("Helvetica", 8),
-        ).pack(anchor="e", pady=(2, 0))
-
-        rail_width = 224 if self.compact else 262
-        results_width = 250 if self.compact else 320
-
-        rail = tk.Frame(self.shell, bg=self.palette["surface"], width=rail_width)
-        rail.grid(row=1, column=0, sticky="nsew", padx=(16, 10), pady=(0, 16))
-        rail.grid_propagate(False)
-
-        main = tk.Frame(self.shell, bg=self.palette["shell"])
-        main.grid(row=1, column=1, sticky="nsew", pady=(0, 16))
-        main.grid_columnconfigure(0, weight=1)
-        main.grid_rowconfigure(1, weight=1)
-
-        results = tk.Frame(self.shell, bg=self.palette["surface"], width=results_width)
-        results.grid(row=1, column=2, sticky="nsew", padx=(10, 16), pady=(0, 16))
-        results.grid_propagate(False)
-        results.grid_columnconfigure(0, weight=1)
-        results.grid_rowconfigure(1, weight=1)
-
-        self._build_left_rail(rail)
-        self._build_feature_grid(main)
-        self._build_results_pane(results)
-
-    def _build_left_rail(self, rail: tk.Frame) -> None:
-        hero = tk.Frame(rail, bg=self.palette["surface_alt"], highlightbackground=self.palette["stroke"], highlightthickness=1)
-        hero.pack(fill="x", padx=18, pady=(18, 14))
-
-        tk.Frame(hero, bg=self.palette["accent"], height=3).pack(fill="x")
-        tk.Label(
-            hero,
-            text="System Ready",
-            bg=self.palette["surface_alt"],
-            fg=self.palette["text"],
-            font=("Helvetica", 13, "bold"),
-        ).pack(anchor="w", padx=16, pady=(16, 4))
-        tk.Label(
-            hero,
-            text="CRIXA is ready. Launch apps, settings, updates, and power controls from here.",
-            bg=self.palette["surface_alt"],
-            fg=self.palette["muted"],
-            justify="left",
-            wraplength=185 if self.compact else 210,
-            font=("Helvetica", 9),
-        ).pack(anchor="w", padx=16, pady=(0, 14))
-
-        session_label = f"Session: {os.environ.get('XDG_SESSION_TYPE', 'plasma').upper()}"
-        tk.Label(
-            hero,
-            text=session_label,
-            bg=self.palette["surface_alt"],
-            fg=self.palette["subtle"],
-            font=("Courier", 8),
-        ).pack(anchor="w", padx=16, pady=(0, 16))
-
-        tk.Label(
-            rail,
-            text="Control Surface",
-            bg=self.palette["surface"],
-            fg=self.palette["muted"],
-            font=("Helvetica", 9, "bold"),
-        ).pack(anchor="w", padx=18)
-
-        for title, subtitle, command in SYSTEM_ACTIONS:
-            self._action_button(rail, title, subtitle, command).pack(fill="x", padx=18, pady=(8, 0))
-
-    def _build_feature_grid(self, main: tk.Frame) -> None:
-        header = tk.Frame(main, bg=self.palette["shell"])
-        header.grid(row=0, column=0, sticky="ew", pady=(0, 14))
-        header.grid_columnconfigure(0, weight=1)
-
-        tk.Label(
-            header,
-            text="Launch Deck",
-            bg=self.palette["shell"],
-            fg=self.palette["text"],
-            font=("Helvetica", 16, "bold"),
-        ).grid(row=0, column=0, sticky="w")
-        tk.Label(
-            header,
-            text="Pinned tools and daily drivers",
-            bg=self.palette["shell"],
-            fg=self.palette["muted"],
-            font=("Helvetica", 9),
-        ).grid(row=1, column=0, sticky="w", pady=(4, 0))
-
-        grid = tk.Frame(main, bg=self.palette["shell"])
-        grid.grid(row=1, column=0, sticky="nsew")
-        columns = 2 if self.compact else 3
-        for column in range(columns):
-            grid.grid_columnconfigure(column, weight=1, uniform="cards")
-
-        for index, desktop_id in enumerate(FEATURED_IDS):
-            app = self.app_map.get(desktop_id)
-            if not app:
-                continue
-            row = index // columns
-            column = index % columns
-            card = self._feature_card(grid, app)
-            card.grid(row=row, column=column, sticky="nsew", padx=(0 if column == 0 else 8, 8 if column < columns - 1 else 0), pady=(0, 10))
-            grid.grid_rowconfigure(row, weight=1, uniform="cardrows")
-
-        footer = tk.Frame(main, bg=self.palette["surface"], highlightbackground=self.palette["stroke"], highlightthickness=1)
-        footer.grid(row=2, column=0, sticky="ew", pady=(10, 0))
-        tk.Label(
-            footer,
-            text="Hints",
-            bg=self.palette["surface"],
-            fg=self.palette["muted"],
-            font=("Helvetica", 9, "bold"),
-        ).pack(anchor="w", padx=16, pady=(12, 2))
-        tk.Label(
-            footer,
-            text="Type to filter installed applications. Press Enter to launch the first result. Press Esc anywhere to close Orbit.",
-            bg=self.palette["surface"],
-            fg=self.palette["subtle"],
-            justify="left",
-            wraplength=self.content_wrap,
-            font=("Helvetica", 9),
-        ).pack(anchor="w", padx=16, pady=(0, 14))
-
-    def _build_results_pane(self, pane: tk.Frame) -> None:
-        tk.Label(
-            pane,
-            text="Index",
-            bg=self.palette["surface"],
-            fg=self.palette["text"],
-            font=("Helvetica", 14, "bold"),
-        ).grid(row=0, column=0, sticky="w", padx=18, pady=(18, 2))
-        tk.Label(
-            pane,
-            textvariable=self.summary_var,
-            bg=self.palette["surface"],
-            fg=self.palette["muted"],
-            font=("Helvetica", 8),
-        ).grid(row=0, column=0, sticky="w", padx=18, pady=(44, 12))
-
-        self.results_list = tk.Listbox(
-            pane,
-            activestyle="none",
-            bg=self.palette["surface_alt"],
-            fg=self.palette["text"],
-            selectbackground=self.palette["accent_soft"],
-            selectforeground=self.palette["text"],
-            relief="flat",
-            bd=0,
-            highlightthickness=0,
-            font=("Helvetica", 9),
-        )
-        self.results_list.grid(row=1, column=0, sticky="nsew", padx=18, pady=(0, 14))
-        self.results_list.bind("<Double-Button-1>", self._launch_selected_result)
-        self.results_list.bind("<Return>", self._launch_selected_result)
-
-        power = tk.Frame(pane, bg=self.palette["surface"])
-        power.grid(row=2, column=0, sticky="ew", padx=18, pady=(0, 18))
-
-        tk.Label(
-            power,
-            text="Power",
-            bg=self.palette["surface"],
-            fg=self.palette["muted"],
-            font=("Helvetica", 9, "bold"),
-        ).pack(anchor="w", pady=(0, 8))
-
-        for title, subtitle, command in POWER_ACTIONS:
-            button = self._action_button(power, title, subtitle, command, compact=True)
-            button.pack(fill="x", pady=(0, 8))
-
-    def _action_button(
-        self,
-        parent: tk.Misc,
-        title: str,
-        subtitle: str,
-        command: list[str],
-        compact: bool = False,
-    ) -> tk.Frame:
-        frame = tk.Frame(parent, bg=self.palette["surface_alt"], highlightbackground=self.palette["stroke"], highlightthickness=1, cursor="hand2")
-
-        accent = tk.Frame(frame, bg=self.palette["accent"], width=3)
-        accent.pack(side="left", fill="y")
-
-        body = tk.Frame(frame, bg=self.palette["surface_alt"])
-        body.pack(side="left", fill="both", expand=True, padx=12, pady=(10 if compact else 12))
-
-        title_label = tk.Label(
-            body,
-            text=title,
-            bg=self.palette["surface_alt"],
-            fg=self.palette["text"],
-            font=("Helvetica", 9 if compact else 10, "bold"),
-        )
-        title_label.pack(anchor="w")
-        subtitle_label = tk.Label(
-            body,
-            text=subtitle,
-            bg=self.palette["surface_alt"],
-            fg=self.palette["muted"],
-            justify="left",
-            wraplength=190 if compact else 205,
-            font=("Helvetica", 8),
-        )
-        subtitle_label.pack(anchor="w", pady=(3, 0))
-
-        def launch(_event: tk.Event[tk.Misc] | None = None) -> None:
-            self.run_command(command)
-
-        surface_widgets = [frame, body, title_label, subtitle_label]
-        self._bind_click_tree(frame, launch, surface_widgets, self.palette["surface_alt"], self.palette["surface_soft"])
-        return frame
-
-    def _feature_card(self, parent: tk.Frame, app: DesktopApp) -> tk.Frame:
-        frame = tk.Frame(parent, bg=self.palette["surface"], highlightbackground=self.palette["stroke"], highlightthickness=1, cursor="hand2")
-        frame.grid_columnconfigure(0, weight=1)
-        tk.Frame(frame, bg=self.palette["accent"], height=3).grid(row=0, column=0, sticky="ew")
-
-        name = tk.Label(
-            frame,
-            text=app.name,
-            bg=self.palette["surface"],
-            fg=self.palette["text"],
-            font=("Helvetica", 11 if self.compact else 12, "bold"),
-        )
-        name.grid(row=1, column=0, sticky="w", padx=16, pady=(16, 4))
-
-        summary = tk.Label(
-            frame,
-            text=app.comment or "Launch application",
-            bg=self.palette["surface"],
-            fg=self.palette["muted"],
-            justify="left",
-            wraplength=self.card_wrap,
-            font=("Helvetica", 8 if self.compact else 9),
-        )
-        summary.grid(row=2, column=0, sticky="w", padx=16, pady=(0, 14))
-
-        launch_hint = tk.Label(
-            frame,
-            text="Launch",
-            bg=self.palette["surface"],
-            fg=self.palette["subtle"],
-            font=("Courier", 8),
-        )
-        launch_hint.grid(row=3, column=0, sticky="w", padx=16, pady=(0, 16))
-
-        def launch(_event: tk.Event[tk.Misc] | None = None) -> None:
-            self.launch_app(app)
-
-        surface_widgets = [frame, name, summary, launch_hint]
-        for widget in surface_widgets:
-            widget.bind("<Button-1>", launch)
-            widget.bind("<Enter>", lambda _event, target=surface_widgets: self._set_surface_state(target, self.palette["surface_alt"]))
-            widget.bind("<Leave>", lambda _event, target=surface_widgets: self._set_surface_state(target, self.palette["surface"]))
-        return frame
-
-    def _focus_search(self) -> None:
-        self.search_entry.focus_set()
-        self.search_entry.icursor("end")
-
-    def _tick_clock(self) -> None:
-        now = datetime.now()
-        self.clock_var.set(now.strftime("%H:%M"))
-        self.date_var.set(now.strftime("%A, %B %d"))
-        self.after(1000, self._tick_clock)
-
-    def refresh_results(self) -> None:
-        query = self.search_var.get().strip().lower()
-        if not query:
-            curated = [self.app_map[app_id] for app_id in FEATURED_IDS if app_id in self.app_map]
-            curated_ids = {app.desktop_id for app in curated}
-            extras = [app for app in self.apps if app.desktop_id not in curated_ids][:18]
-            self.filtered_apps = curated + extras
-            self.summary_var.set(f"{len(self.apps)} applications indexed")
-        else:
-            self.filtered_apps = [
-                app
-                for app in self.apps
-                if query in app.name.lower() or query in app.comment.lower() or query in app.desktop_id.lower()
-            ][:40]
-            self.summary_var.set(f"{len(self.filtered_apps)} matches for “{query}”")
-
-        self.results_list.delete(0, "end")
-        for app in self.filtered_apps:
-            label = app.name
-            if app.comment:
-                max_comment = 34 if self.compact else 48
-                comment = app.comment
-                if len(comment) > max_comment:
-                    comment = comment[: max_comment - 1].rstrip() + "..."
-                label += f"  -  {comment}"
-            self.results_list.insert("end", label)
-
-        if self.filtered_apps:
-            self.results_list.selection_clear(0, "end")
-            self.results_list.selection_set(0)
-            self.results_list.activate(0)
-
-    def _move_results(self, delta: int) -> None:
-        if not self.filtered_apps:
-            return
-        current = self.results_list.curselection()
-        index = current[0] if current else 0
-        index = max(0, min(len(self.filtered_apps) - 1, index + delta))
-        self.results_list.selection_clear(0, "end")
-        self.results_list.selection_set(index)
-        self.results_list.activate(index)
-        self.results_list.see(index)
-
-    def _launch_default_selection(self, _event: tk.Event[tk.Misc] | None = None) -> str:
-        current = self.results_list.curselection()
-        if current:
-            self.launch_app(self.filtered_apps[current[0]])
-            return "break"
-        if self.filtered_apps:
-            self.launch_app(self.filtered_apps[0])
-            return "break"
-        return "break"
-
-    def _launch_selected_result(self, _event: tk.Event[tk.Misc] | None = None) -> str:
-        current = self.results_list.curselection()
-        if current:
-            self.launch_app(self.filtered_apps[current[0]])
-        return "break"
-
-    def launch_app(self, app: DesktopApp) -> None:
-        fallback = desktop_exec_fallback(app.exec_line)
-        if fallback and self.run_command(fallback):
-            return
-
-        gio = shutil_which("gio")
-        if gio and app.path.exists() and self.run_command([gio, "launch", str(app.path)]):
-            return
-
-        launcher = shutil_which("gtk-launch")
-        if launcher:
-            self.run_command([launcher, app.desktop_id.removesuffix(".desktop")])
-
-    def run_command(self, command: list[str]) -> bool:
-        if not command:
-            return False
-        env = os.environ.copy()
-        extra_paths = [str(Path.home() / ".local" / "bin"), "/usr/local/bin", "/usr/bin", "/bin"]
-        env["PATH"] = os.pathsep.join([*extra_paths, env.get("PATH", "")])
-        executable = command[0]
-        if "/" not in executable and shutil_which(executable, env.get("PATH", "")) is None:
-            if executable == "crixa-store" and DEV_ROOT is not None:
-                local_store = DEV_ROOT / "apps" / "crixa-store.py"
-                if local_store.exists():
-                    command = [sys.executable, str(local_store), *command[1:]]
-                    executable = command[0]
-                else:
-                    messagebox.showerror("Orbit", f"Could not find command: {executable}")
-                    return False
-            else:
-                messagebox.showerror("Orbit", f"Could not find command: {executable}")
-                return False
-        if "/" not in executable and shutil_which(executable, env.get("PATH", "")) is None:
-            messagebox.showerror("Orbit", f"Could not find command: {executable}")
-            return False
-        try:
-            subprocess.Popen(command, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
-        except Exception as exc:
-            messagebox.showerror("Orbit", f"Could not launch {command[0]}:\n{exc}")
-            return False
-        self.close()
-        return True
-
-    def close(self) -> None:
-        self.destroy()
-
-
-def shutil_which(program: str, path_value: str | None = None) -> str | None:
-    for directory in (path_value or os.environ.get("PATH", "")).split(os.pathsep):
-        if not directory:
-            continue
-        candidate = Path(directory) / program
-        if candidate.is_file() and os.access(candidate, os.X_OK):
-            return str(candidate)
+def read_recent(path: Path = RECENT_PATH) -> list[str]:
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+
+    ids: list[str] = []
+    if isinstance(raw, list):
+        for item in raw:
+            if isinstance(item, str):
+                ids.append(item)
+            elif isinstance(item, dict) and isinstance(item.get("desktop_id"), str):
+                ids.append(item["desktop_id"])
+    elif isinstance(raw, dict) and isinstance(raw.get("items"), list):
+        for item in raw["items"]:
+            if isinstance(item, dict) and isinstance(item.get("desktop_id"), str):
+                ids.append(item["desktop_id"])
+    return ids[:RECENT_LIMIT]
+
+
+def write_recent(desktop_ids: list[str], path: Path = RECENT_PATH) -> None:
+    deduped: list[str] = []
+    for desktop_id in desktop_ids:
+        if desktop_id and desktop_id not in deduped:
+            deduped.append(desktop_id)
+    payload = {
+        "version": 1,
+        "updated_at": datetime.now().isoformat(timespec="seconds"),
+        "items": [{"desktop_id": desktop_id} for desktop_id in deduped[:RECENT_LIMIT]],
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def app_to_item(app: DesktopApp) -> CommandItem:
+    return CommandItem(
+        item_id=f"app:{app.desktop_id}",
+        title=app.name,
+        subtitle=app.comment or "Launch application",
+        icon=app.icon or "application-x-executable",
+        kind="app",
+        app=app,
+    )
+
+
+def action_to_item(action: ActionSpec) -> CommandItem:
+    return CommandItem(
+        item_id=f"action:{action.action_id}",
+        title=action.title,
+        subtitle=action.subtitle,
+        icon=action.icon,
+        kind="action",
+        command=action.command,
+    )
+
+
+def app_search_score(app: DesktopApp, query: str) -> int | None:
+    haystacks = [
+        app.name.lower(),
+        app.comment.lower(),
+        app.desktop_id.lower(),
+        " ".join(app.categories).lower(),
+        " ".join(app.keywords).lower(),
+    ]
+    if app.name.lower().startswith(query):
+        return 0
+    if any(part.startswith(query) for part in app.name.lower().split()):
+        return 1
+    for index, haystack in enumerate(haystacks):
+        if query in haystack:
+            return 2 + index
     return None
 
 
-def main() -> int:
-    app = OrbitDashboard()
-    app.mainloop()
+def item_search_score(item: CommandItem, query: str) -> int | None:
+    title = item.title.lower()
+    subtitle = item.subtitle.lower()
+    if title.startswith(query):
+        return 0
+    if any(part.startswith(query) for part in title.split()):
+        return 1
+    if query in title:
+        return 2
+    if query in subtitle:
+        return 3
+    return None
+
+
+def run_launch_tool(command: list[str], env: dict[str, str], timeout: int = 6) -> tuple[bool, str]:
+    try:
+        result = subprocess.run(command, env=env, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return False, f"{command[0]} timed out"
+    except Exception as exc:
+        return False, str(exc)
+
+    if result.returncode == 0:
+        return True, ""
+    detail = (result.stderr or result.stdout or "").strip()
+    if detail:
+        return False, detail.splitlines()[-1]
+    return False, f"{command[0]} exited with status {result.returncode}"
+
+
+def direct_spawn(command: tuple[str, ...] | list[str], env: dict[str, str]) -> tuple[bool, str]:
+    if not command:
+        return False, "No command configured"
+
+    resolved = list(command)
+    executable = resolved[0]
+    if "/" not in executable:
+        found = find_executable(executable, env.get("PATH"))
+        if found is None:
+            return False, f"Could not find command: {executable}"
+        if DEV_ROOT is not None and found.endswith(".py"):
+            resolved = [sys.executable, found, *resolved[1:]]
+        else:
+            resolved[0] = found
+
+    try:
+        subprocess.Popen(resolved, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    except Exception as exc:
+        return False, f"Could not launch {Path(resolved[0]).name}: {exc}"
+    return True, ""
+
+
+def launch_desktop_app(app: DesktopApp, env: dict[str, str]) -> tuple[bool, str, str]:
+    errors: list[str] = []
+
+    gio = find_executable("gio", env.get("PATH"))
+    if gio and app.path.exists():
+        ok, message = run_launch_tool([gio, "launch", str(app.path)], env)
+        if ok:
+            return True, "gio", ""
+        errors.append(f"gio: {message}")
+
+    gtk_launch = find_executable("gtk-launch", env.get("PATH"))
+    if gtk_launch:
+        ok, message = run_launch_tool([gtk_launch, app.desktop_id.removesuffix(".desktop")], env)
+        if ok:
+            return True, "gtk-launch", ""
+        errors.append(f"gtk-launch: {message}")
+
+    fallback = command_for_desktop_exec(app.exec_line)
+    ok, message = direct_spawn(fallback, env)
+    if ok:
+        return True, "direct", ""
+    errors.append(f"direct: {message}")
+
+    return False, "", " | ".join(error for error in errors if error)
+
+
+def launch_command(command: tuple[str, ...], env: dict[str, str]) -> tuple[bool, str]:
+    ok, message = direct_spawn(command, env)
+    if ok:
+        return True, ""
+    return False, message
+
+
+if QtWidgets is not None:
+
+    class SearchLineEdit(QtWidgets.QLineEdit):
+        moveRequested = QtCore.Signal(int)
+        launchRequested = QtCore.Signal()
+        escapePressed = QtCore.Signal()
+
+        def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:
+            if event.key() == QtCore.Qt.Key_Down:
+                self.moveRequested.emit(1)
+                event.accept()
+                return
+            if event.key() == QtCore.Qt.Key_Up:
+                self.moveRequested.emit(-1)
+                event.accept()
+                return
+            if event.key() in (QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter):
+                self.launchRequested.emit()
+                event.accept()
+                return
+            if event.key() == QtCore.Qt.Key_Escape:
+                self.escapePressed.emit()
+                event.accept()
+                return
+            super().keyPressEvent(event)
+
+
+    class CommandCard(QtWidgets.QFrame):
+        clicked = QtCore.Signal(object)
+
+        def __init__(self, item: CommandItem, parent: QtWidgets.QWidget | None = None) -> None:
+            super().__init__(parent)
+            self.item = item
+            self.setObjectName("CommandCard")
+            self.setCursor(QtCore.Qt.PointingHandCursor)
+            self.setMinimumHeight(74)
+            self.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
+
+            layout = QtWidgets.QHBoxLayout(self)
+            layout.setContentsMargins(14, 12, 14, 12)
+            layout.setSpacing(12)
+
+            icon_label = QtWidgets.QLabel()
+            icon = icon_for_name(item.icon)
+            icon_label.setPixmap(icon.pixmap(28, 28))
+            icon_label.setFixedSize(32, 32)
+            icon_label.setAlignment(QtCore.Qt.AlignCenter)
+            layout.addWidget(icon_label)
+
+            text_layout = QtWidgets.QVBoxLayout()
+            text_layout.setSpacing(2)
+            title = QtWidgets.QLabel(item.title)
+            title.setObjectName("CardTitle")
+            subtitle = QtWidgets.QLabel(item.subtitle)
+            subtitle.setObjectName("CardSubtitle")
+            subtitle.setWordWrap(True)
+            text_layout.addWidget(title)
+            text_layout.addWidget(subtitle)
+            layout.addLayout(text_layout, 1)
+
+        def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:
+            if event.button() == QtCore.Qt.LeftButton and self.rect().contains(event.pos()):
+                self.clicked.emit(self.item)
+            super().mouseReleaseEvent(event)
+
+
+    class OrbitDashboard(QtWidgets.QWidget):
+        def __init__(self) -> None:
+            super().__init__()
+            self.setWindowTitle(APP_NAME)
+            self.setWindowFlags(QtCore.Qt.Window | QtCore.Qt.FramelessWindowHint)
+            self.setAttribute(QtCore.Qt.WA_TranslucentBackground, True)
+
+            self.apps = load_apps()
+            self.app_map = {app.desktop_id: app for app in self.apps}
+            self.recent_ids = read_recent()
+            self.filtered_items: list[CommandItem] = []
+            self.drag_position: QtCore.QPoint | None = None
+            self.env = os.environ.copy()
+            self.env["PATH"] = build_path()
+
+            self.action_items = [action_to_item(action) for action in ACTION_SPECS]
+            self._build_ui()
+            self._position_window()
+            self.refresh()
+            self.search.setFocus(QtCore.Qt.OtherFocusReason)
+
+        def _build_ui(self) -> None:
+            outer = QtWidgets.QVBoxLayout(self)
+            outer.setContentsMargins(0, 0, 0, 0)
+
+            self.shell = QtWidgets.QFrame()
+            self.shell.setObjectName("OrbitShell")
+            outer.addWidget(self.shell)
+
+            layout = QtWidgets.QVBoxLayout(self.shell)
+            layout.setContentsMargins(18, 16, 18, 18)
+            layout.setSpacing(14)
+
+            self.header = QtWidgets.QFrame()
+            self.header.setObjectName("Header")
+            header_layout = QtWidgets.QHBoxLayout(self.header)
+            header_layout.setContentsMargins(16, 14, 12, 14)
+            header_layout.setSpacing(16)
+
+            brand_layout = QtWidgets.QVBoxLayout()
+            brand_layout.setSpacing(1)
+            title = QtWidgets.QLabel("Orbit")
+            title.setObjectName("Title")
+            subtitle = QtWidgets.QLabel("Command Deck")
+            subtitle.setObjectName("HeaderSubtitle")
+            brand_layout.addWidget(title)
+            brand_layout.addWidget(subtitle)
+            header_layout.addLayout(brand_layout)
+
+            self.search = SearchLineEdit()
+            self.search.setObjectName("Search")
+            self.search.setPlaceholderText("Search apps and system actions")
+            self.search.textChanged.connect(self.refresh)
+            self.search.moveRequested.connect(self.move_selection)
+            self.search.launchRequested.connect(self.launch_selected)
+            self.search.escapePressed.connect(self.close)
+            header_layout.addWidget(self.search, 1)
+
+            self.clock = QtWidgets.QLabel()
+            self.clock.setObjectName("Clock")
+            self.clock.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+            header_layout.addWidget(self.clock)
+
+            close_btn = QtWidgets.QPushButton("x")
+            close_btn.setObjectName("CloseButton")
+            close_btn.setFixedSize(32, 32)
+            close_btn.clicked.connect(self.close)
+            header_layout.addWidget(close_btn)
+            layout.addWidget(self.header)
+
+            body = QtWidgets.QHBoxLayout()
+            body.setSpacing(14)
+            layout.addLayout(body, 1)
+
+            self.left_panel = QtWidgets.QFrame()
+            self.left_panel.setObjectName("Panel")
+            left_layout = QtWidgets.QVBoxLayout(self.left_panel)
+            left_layout.setContentsMargins(14, 14, 14, 14)
+            left_layout.setSpacing(12)
+
+            self.card_scroll = QtWidgets.QScrollArea()
+            self.card_scroll.setObjectName("CardScroll")
+            self.card_scroll.setWidgetResizable(True)
+            self.card_scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
+            self.card_host = QtWidgets.QWidget()
+            self.card_layout = QtWidgets.QVBoxLayout(self.card_host)
+            self.card_layout.setContentsMargins(0, 0, 0, 0)
+            self.card_layout.setSpacing(10)
+            self.card_scroll.setWidget(self.card_host)
+            left_layout.addWidget(self.card_scroll)
+            body.addWidget(self.left_panel, 5)
+
+            self.right_panel = QtWidgets.QFrame()
+            self.right_panel.setObjectName("Panel")
+            right_layout = QtWidgets.QVBoxLayout(self.right_panel)
+            right_layout.setContentsMargins(14, 14, 14, 14)
+            right_layout.setSpacing(10)
+
+            results_header = QtWidgets.QHBoxLayout()
+            results_title = QtWidgets.QLabel("Results")
+            results_title.setObjectName("SectionTitle")
+            self.count_label = QtWidgets.QLabel()
+            self.count_label.setObjectName("Muted")
+            self.count_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+            results_header.addWidget(results_title)
+            results_header.addWidget(self.count_label, 1)
+            right_layout.addLayout(results_header)
+
+            self.results = QtWidgets.QListWidget()
+            self.results.setObjectName("Results")
+            self.results.setAlternatingRowColors(False)
+            self.results.itemActivated.connect(lambda _item: self.launch_selected())
+            self.results.itemClicked.connect(lambda _item: self.search.setFocus(QtCore.Qt.OtherFocusReason))
+            right_layout.addWidget(self.results, 1)
+
+            self.status = QtWidgets.QLabel()
+            self.status.setObjectName("Status")
+            self.status.setWordWrap(True)
+            right_layout.addWidget(self.status)
+            body.addWidget(self.right_panel, 4)
+
+            self.apply_style()
+
+            self.timer = QtCore.QTimer(self)
+            self.timer.timeout.connect(self.tick_clock)
+            self.timer.start(1000)
+            self.tick_clock()
+
+        def apply_style(self) -> None:
+            self.setStyleSheet(
+                """
+                QWidget {
+                    color: #eef4f2;
+                    font-family: "IBM Plex Sans", "DejaVu Sans", sans-serif;
+                    font-size: 10pt;
+                    letter-spacing: 0;
+                }
+                QFrame#OrbitShell {
+                    background: #0e1117;
+                    border: 1px solid #3a4652;
+                    border-radius: 18px;
+                }
+                QFrame#Header, QFrame#Panel {
+                    background: #171d24;
+                    border: 1px solid #2f3944;
+                    border-radius: 12px;
+                }
+                QLabel#Title {
+                    font-size: 24pt;
+                    font-weight: 700;
+                    color: #ffffff;
+                }
+                QLabel#HeaderSubtitle, QLabel#Muted, QLabel#Status {
+                    color: #9ba8a7;
+                }
+                QLabel#Clock {
+                    color: #d7eeea;
+                    font-size: 12pt;
+                    font-weight: 700;
+                }
+                QLabel#SectionTitle {
+                    color: #f5fbf9;
+                    font-size: 12pt;
+                    font-weight: 700;
+                }
+                QLineEdit#Search {
+                    background: #0b0f14;
+                    color: #f5fbf9;
+                    border: 1px solid #40505a;
+                    border-radius: 10px;
+                    padding: 12px 14px;
+                    selection-background-color: #247f78;
+                    font-size: 13pt;
+                }
+                QLineEdit#Search:focus {
+                    border: 1px solid #35c9ba;
+                }
+                QPushButton#CloseButton {
+                    background: #222b33;
+                    border: 1px solid #394650;
+                    border-radius: 16px;
+                    color: #cbd6d3;
+                    font-weight: 700;
+                }
+                QPushButton#CloseButton:hover {
+                    background: #32404a;
+                    color: #ffffff;
+                }
+                QScrollArea#CardScroll {
+                    background: transparent;
+                    border: none;
+                }
+                QFrame#CommandCard {
+                    background: #202832;
+                    border: 1px solid #34414a;
+                    border-radius: 10px;
+                }
+                QFrame#CommandCard:hover {
+                    background: #263340;
+                    border: 1px solid #35c9ba;
+                }
+                QLabel#CardTitle {
+                    color: #f6fbf9;
+                    font-size: 11pt;
+                    font-weight: 700;
+                }
+                QLabel#CardSubtitle {
+                    color: #a5b1af;
+                    font-size: 9pt;
+                }
+                QListWidget#Results {
+                    background: #0b0f14;
+                    border: 1px solid #2f3944;
+                    border-radius: 10px;
+                    outline: 0;
+                    padding: 6px;
+                }
+                QListWidget#Results::item {
+                    border-radius: 8px;
+                    padding: 10px;
+                    margin: 2px;
+                }
+                QListWidget#Results::item:selected {
+                    background: #1d706a;
+                    color: #ffffff;
+                }
+                QScrollBar:vertical {
+                    background: transparent;
+                    width: 10px;
+                }
+                QScrollBar::handle:vertical {
+                    background: #374650;
+                    border-radius: 5px;
+                    min-height: 24px;
+                }
+                QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                    height: 0;
+                }
+                """
+            )
+
+        def _position_window(self) -> None:
+            screen = QtWidgets.QApplication.primaryScreen()
+            available = screen.availableGeometry() if screen else QtCore.QRect(0, 0, 1280, 720)
+            width = min(1180, max(800, int(available.width() * 0.78)))
+            height = min(760, max(560, int(available.height() * 0.78)))
+            x = available.x() + max(12, (available.width() - width) // 2)
+            y = available.y() + max(12, (available.height() - height) // 2)
+            self.setGeometry(x, y, width, height)
+
+        def tick_clock(self) -> None:
+            self.clock.setText(datetime.now().strftime("%H:%M"))
+
+        def pinned_items(self) -> list[CommandItem]:
+            return [app_to_item(self.app_map[desktop_id]) for desktop_id in PINNED_IDS if desktop_id in self.app_map]
+
+        def recent_items(self) -> list[CommandItem]:
+            items: list[CommandItem] = []
+            for desktop_id in self.recent_ids:
+                app = self.app_map.get(desktop_id)
+                if app is not None and desktop_id not in PINNED_IDS:
+                    items.append(app_to_item(app))
+            return items[:RECENT_LIMIT]
+
+        def default_items(self) -> list[CommandItem]:
+            items = self.pinned_items()
+            seen = {item.item_id for item in items}
+            for item in self.recent_items():
+                if item.item_id not in seen:
+                    seen.add(item.item_id)
+                    items.append(item)
+            for app in self.apps:
+                item = app_to_item(app)
+                if item.item_id not in seen:
+                    seen.add(item.item_id)
+                    items.append(item)
+                if len(items) >= 24:
+                    break
+            return items
+
+        def search_items(self, query: str) -> list[CommandItem]:
+            scored: list[tuple[int, str, CommandItem]] = []
+            for app in self.apps:
+                score = app_search_score(app, query)
+                if score is not None:
+                    scored.append((score, app.name.lower(), app_to_item(app)))
+            for item in self.action_items:
+                score = item_search_score(item, query)
+                if score is not None:
+                    scored.append((score, item.title.lower(), item))
+            return [item for _score, _name, item in sorted(scored)[:40]]
+
+        def refresh(self) -> None:
+            query = self.search.text().strip().lower()
+            self.filtered_items = self.search_items(query) if query else self.default_items()
+            self.refresh_cards(query)
+            self.refresh_results(query)
+            if query:
+                self.status.setText(f"{len(self.filtered_items)} matches for '{query}'")
+            else:
+                self.status.setText(f"{len(self.apps)} applications indexed")
+
+        def refresh_cards(self, query: str) -> None:
+            while self.card_layout.count():
+                item = self.card_layout.takeAt(0)
+                widget = item.widget()
+                if widget is not None:
+                    widget.deleteLater()
+
+            if query:
+                self.add_card_section("Top Matches", self.filtered_items[:8])
+            else:
+                self.add_card_section("Pinned", self.pinned_items())
+                recent = self.recent_items()
+                if recent:
+                    self.add_card_section("Recent", recent)
+                self.add_card_section("System", [item for item in self.action_items if item.command and item.kind == "action" and item.item_id not in {"action:lock", "action:sleep", "action:restart", "action:poweroff"}])
+                self.add_card_section("Power", [item for item in self.action_items if item.item_id in {"action:lock", "action:sleep", "action:restart", "action:poweroff"}])
+            self.card_layout.addStretch(1)
+
+        def add_card_section(self, title: str, items: list[CommandItem]) -> None:
+            if not items:
+                return
+            label = QtWidgets.QLabel(title)
+            label.setObjectName("SectionTitle")
+            self.card_layout.addWidget(label)
+            for item in items:
+                card = CommandCard(item)
+                card.clicked.connect(self.launch_item)
+                self.card_layout.addWidget(card)
+
+        def refresh_results(self, query: str) -> None:
+            self.results.clear()
+            for item in self.filtered_items:
+                row = QtWidgets.QListWidgetItem()
+                row.setText(f"{item.title}\n{item.subtitle}")
+                row.setIcon(icon_for_name(item.icon))
+                row.setSizeHint(QtCore.QSize(0, 56))
+                row.setData(QtCore.Qt.UserRole, item)
+                self.results.addItem(row)
+            if self.results.count():
+                self.results.setCurrentRow(0)
+            label = "matches" if query else "ready"
+            self.count_label.setText(f"{self.results.count()} {label}")
+
+        def move_selection(self, delta: int) -> None:
+            if self.results.count() == 0:
+                return
+            current = self.results.currentRow()
+            if current < 0:
+                current = 0
+            next_row = max(0, min(self.results.count() - 1, current + delta))
+            self.results.setCurrentRow(next_row)
+
+        def launch_selected(self) -> None:
+            row = self.results.currentRow()
+            if row < 0 and self.results.count():
+                row = 0
+            if row < 0:
+                return
+            item = self.results.item(row).data(QtCore.Qt.UserRole)
+            if isinstance(item, CommandItem):
+                self.launch_item(item)
+
+        def launch_item(self, item: CommandItem) -> None:
+            if item.app is not None:
+                ok, backend, message = launch_desktop_app(item.app, self.env)
+                if ok:
+                    self.record_recent(item.app.desktop_id)
+                    self.status.setText(f"Launched {item.title} with {backend}")
+                    self.close()
+                    return
+                self.status.setText(f"Could not launch {item.title}: {message}")
+                self.search.setFocus(QtCore.Qt.OtherFocusReason)
+                return
+
+            ok, message = launch_command(item.command, self.env)
+            if ok:
+                self.status.setText(f"Launched {item.title}")
+                self.close()
+                return
+            self.status.setText(f"Could not launch {item.title}: {message}")
+            self.search.setFocus(QtCore.Qt.OtherFocusReason)
+
+        def record_recent(self, desktop_id: str) -> None:
+            self.recent_ids = [desktop_id, *[item for item in self.recent_ids if item != desktop_id]][:RECENT_LIMIT]
+            try:
+                write_recent(self.recent_ids)
+            except Exception:
+                pass
+
+        def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
+            if event.button() == QtCore.Qt.LeftButton and event.pos().y() <= 92:
+                self.drag_position = event.globalPos() - self.frameGeometry().topLeft()
+                event.accept()
+                return
+            super().mousePressEvent(event)
+
+        def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:
+            if self.drag_position is not None and event.buttons() & QtCore.Qt.LeftButton:
+                self.move(event.globalPos() - self.drag_position)
+                event.accept()
+                return
+            super().mouseMoveEvent(event)
+
+        def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:
+            self.drag_position = None
+            super().mouseReleaseEvent(event)
+
+
+def icon_for_name(name: str):
+    if QtGui is None:
+        return None
+    if name:
+        icon_path = Path(name)
+        if icon_path.is_absolute() and icon_path.exists():
+            return QtGui.QIcon(str(icon_path))
+        icon = QtGui.QIcon.fromTheme(name)
+        if not icon.isNull():
+            return icon
+    fallback = QtGui.QIcon.fromTheme("application-x-executable")
+    if not fallback.isNull():
+        return fallback
+    return QtWidgets.QApplication.style().standardIcon(QtWidgets.QStyle.SP_FileIcon)
+
+
+def launch_backend_names(path_value: str) -> list[str]:
+    names: list[str] = []
+    if find_executable("gio", path_value):
+        names.append("gio")
+    if find_executable("gtk-launch", path_value):
+        names.append("gtk-launch")
+    names.append("direct-exec")
+    return names
+
+
+def self_test(args: argparse.Namespace) -> int:
+    failures: list[str] = []
+    if QT_IMPORT_ERROR is not None:
+        failures.append(f"PySide2 Qt Widgets import failed: {QT_IMPORT_ERROR}")
+
+    extra_bins = [Path(path) for path in args.bin_dir or []]
+    path_value = build_path(extra_bins)
+    explicit_dirs = [Path(path) for path in args.desktop_dir or []] or None
+    apps = load_apps(explicit_dirs=explicit_dirs, path_value=path_value)
+    app_map = {app.desktop_id: app for app in apps}
+
+    if not apps:
+        failures.append("No launchable desktop applications indexed")
+
+    missing_pinned = [desktop_id for desktop_id in PINNED_IDS if desktop_id not in app_map]
+    if missing_pinned:
+        failures.append(f"Missing pinned applications: {', '.join(missing_pinned)}")
+
+    backends = launch_backend_names(path_value)
+    if not backends:
+        failures.append("No launch backend discovered")
+
+    if failures:
+        print("ORBIT_SELF_TEST_FAIL")
+        for failure in failures:
+            print(f"- {failure}")
+        return 1
+
+    qt_version = getattr(QtCore, "qVersion", lambda: "unknown")() if QtCore is not None else "missing"
+    print("ORBIT_SELF_TEST_OK")
+    print(f"Qt binding: PySide2 / Qt {qt_version}")
+    print(f"Applications indexed: {len(apps)}")
+    print(f"Pinned present: {len(PINNED_IDS)}")
+    print(f"Launch backends: {', '.join(backends)}")
     return 0
+
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Orbit Command Deck")
+    parser.add_argument("--self-test", action="store_true", help="validate Orbit runtime dependencies and app indexing")
+    parser.add_argument("--desktop-dir", action="append", help="desktop application directory to index during self-test")
+    parser.add_argument("--bin-dir", action="append", help="binary directory to prepend during self-test")
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(list(argv if argv is not None else sys.argv[1:]))
+    if args.self_test:
+        return self_test(args)
+
+    if QT_IMPORT_ERROR is not None or QtWidgets is None:
+        print(f"Orbit requires python3-pyside2.qtwidgets: {QT_IMPORT_ERROR}", file=sys.stderr)
+        return 127
+
+    QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps, True)
+    app = QtWidgets.QApplication(sys.argv)
+    QtGui.QIcon.setThemeName(os.environ.get("CRIXA_ICON_THEME", "CRIXA-Depth"))
+    window = OrbitDashboard()
+    window.show()
+    window.raise_()
+    window.activateWindow()
+    return app.exec_()
 
 
 if __name__ == "__main__":

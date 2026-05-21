@@ -7,8 +7,10 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CATALOG_PATH="$PROJECT_ROOT/store-packages/catalog.json"
 SYSTEM_ROLLOUTS_PATH="$PROJECT_ROOT/store-packages/system-rollouts.json"
 SRC_PACKAGES_DIR="$PROJECT_ROOT/store-packages/packages"
+SRC_ASSETS_DIR="$PROJECT_ROOT/store-packages/assets"
 REPO_ROOT="${REPO_ROOT:-$PROJECT_ROOT/crixa-repo}"
 REPO_PACKAGES_DIR="$REPO_ROOT/packages"
+REPO_ASSETS_DIR="$REPO_ROOT/assets"
 REPO_METADATA_DIR="$REPO_ROOT/metadata"
 REPO_KEYS_DIR="$REPO_ROOT/keys"
 
@@ -51,12 +53,15 @@ main() {
   chmod 0644 "$PUBLIC_KEY"
 
   rm -f "$REPO_PACKAGES_DIR"/*.crixapkg
+  rm -rf "$REPO_ASSETS_DIR"
+  mkdir -p "$REPO_ASSETS_DIR"
 
-  export CATALOG_PATH SYSTEM_ROLLOUTS_PATH SRC_PACKAGES_DIR REPO_PACKAGES_DIR REPO_METADATA_DIR
+  export CATALOG_PATH SYSTEM_ROLLOUTS_PATH SRC_PACKAGES_DIR SRC_ASSETS_DIR REPO_PACKAGES_DIR REPO_ASSETS_DIR REPO_METADATA_DIR
   "$PYTHON_BIN" - <<'PY'
 import hashlib
 import json
 import os
+import shutil
 import tarfile
 import tempfile
 from datetime import datetime, timezone
@@ -65,7 +70,9 @@ from pathlib import Path
 catalog_path = Path(os.environ["CATALOG_PATH"])
 system_rollouts_path = Path(os.environ["SYSTEM_ROLLOUTS_PATH"])
 src_packages_dir = Path(os.environ["SRC_PACKAGES_DIR"])
+src_assets_dir = Path(os.environ["SRC_ASSETS_DIR"])
 repo_packages_dir = Path(os.environ["REPO_PACKAGES_DIR"])
+repo_assets_dir = Path(os.environ["REPO_ASSETS_DIR"])
 repo_metadata_dir = Path(os.environ["REPO_METADATA_DIR"])
 
 
@@ -102,6 +109,9 @@ for app in apps:
     payload_root = src_packages_dir / app_id / "payload"
     if not payload_root.is_dir():
         raise SystemExit(f"payload missing for {app_id}: {payload_root}")
+    assets_root = src_assets_dir / app_id
+    if assets_root.is_dir():
+        shutil.copytree(assets_root, repo_assets_dir / app_id, dirs_exist_ok=True)
 
     pkg_filename = f"{app_id}-{version}.crixapkg"
     pkg_path = repo_packages_dir / pkg_filename
@@ -118,6 +128,7 @@ for app in apps:
         "features": app.get("features", []),
         "tags": app.get("tags", []),
         "payload_schema": "v1",
+        "install_scopes": app.get("install_scopes", ["user", "system"]),
     }
 
     with tempfile.TemporaryDirectory(prefix="crixa-pkg-") as tmpdir:
@@ -150,6 +161,14 @@ for app in apps:
             "entrypoint": app.get("entrypoint", ""),
             "features": app.get("features", []),
             "tags": app.get("tags", []),
+            "publisher": app.get("publisher", "CRIXA Project"),
+            "license": app.get("license", "MIT"),
+            "homepage": app.get("homepage", ""),
+            "release_notes": app.get("release_notes", []),
+            "permissions": app.get("permissions", []),
+            "screenshots": app.get("screenshots", []),
+            "hero_image": app.get("hero_image", ""),
+            "install_scopes": app.get("install_scopes", ["user", "system"]),
             "filename": pkg_filename,
             "size_bytes": pkg_path.stat().st_size,
             "sha256": sha256sum(pkg_path),
