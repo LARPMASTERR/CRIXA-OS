@@ -112,6 +112,14 @@ if ! chroot "$ROOTFS_DIR" /bin/bash -lc "dpkg -s python3-pyside2.qtwidgets >/dev
   echo "Rootfs missing python3-pyside2.qtwidgets; enabling package refresh for Orbit"
   SYNC_APT=1
 fi
+if ! chroot "$ROOTFS_DIR" /bin/bash -lc "dpkg -s python3-psutil >/dev/null 2>&1"; then
+  echo "Rootfs missing python3-psutil; enabling package refresh for Pulse"
+  SYNC_APT=1
+fi
+if ! chroot "$ROOTFS_DIR" /bin/bash -lc "dpkg -s whiptail >/dev/null 2>&1"; then
+  echo "Rootfs missing whiptail; enabling package refresh for Dockyard TTY mode"
+  SYNC_APT=1
+fi
 
 mkdir -p "$ISO_DIR"
 rm -rf "$WORK_DIR"

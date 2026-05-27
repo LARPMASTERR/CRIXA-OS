@@ -500,7 +500,14 @@ def cmd_verify(args: argparse.Namespace) -> int:
 
 
 def cmd_list(args: argparse.Namespace) -> int:
-    repo = load_repo(require_signature=not args.no_verify)
+    try:
+        repo = load_repo(require_signature=not args.no_verify)
+    except Exception as exc:
+        if args.json:
+            print(json.dumps({"ok": False, "error": str(exc), "packages": []}, indent=2))
+        else:
+            print(f"list failed: {exc}", file=sys.stderr)
+        return 1
     items = sorted(package_index(repo).values(), key=lambda item: str(item.get("name", "")).lower())
     if args.json:
         print(json.dumps({"packages": items}, indent=2))
@@ -573,7 +580,13 @@ def cmd_upgrade(args: argparse.Namespace) -> int:
         print(json.dumps({"updated": []}, indent=2) if args.json else "No installed packages to upgrade")
         return 0
 
-    repo = load_repo(require_signature=not args.no_verify)
+    try:
+        repo = load_repo(require_signature=not args.no_verify)
+    except Exception as exc:
+        print(f"upgrade failed: {exc}", file=sys.stderr)
+        if args.json:
+            print(json.dumps({"updated": [], "error": str(exc)}, indent=2))
+        return 1
     idx = package_index(repo)
     pending = []
     for item in installed:

@@ -97,10 +97,14 @@ require_file "$PROJECT_ROOT/apps/crixa-store.sh"
 require_file "$PROJECT_ROOT/apps/crixa-store.desktop"
 require_file "$PROJECT_ROOT/apps/crixa-installer.sh"
 require_file "$PROJECT_ROOT/apps/crixa-installer.py"
+require_file "$PROJECT_ROOT/apps/crixa-installer-helper.py"
+require_file "$PROJECT_ROOT/apps/org.crixa.dockyard.policy"
 require_file "$PROJECT_ROOT/apps/crixa-install.sh"
 require_file "$PROJECT_ROOT/apps/crixa-installer.desktop"
 require_file "$PROJECT_ROOT/apps/crixa-updater.sh"
 require_file "$PROJECT_ROOT/apps/crixa-updater.py"
+require_file "$PROJECT_ROOT/apps/crixa-updater-helper.py"
+require_file "$PROJECT_ROOT/apps/org.crixa.transit.policy"
 require_file "$PROJECT_ROOT/apps/crixa-updater.desktop"
 require_file "$PROJECT_ROOT/apps/crixa-session-mode.sh"
 require_file "$PROJECT_ROOT/apps/crixa-wayland-control.sh"
@@ -108,6 +112,10 @@ require_file "$PROJECT_ROOT/apps/crixa-wayland-control.py"
 require_file "$PROJECT_ROOT/apps/crixa-wayland-control.desktop"
 require_file "$PROJECT_ROOT/apps/crixa-releasectl.sh"
 require_file "$PROJECT_ROOT/apps/crixa-releasectl.py"
+require_file "$PROJECT_ROOT/apps/crixa-task-manager.sh"
+require_file "$PROJECT_ROOT/apps/crixa-task-manager.py"
+require_file "$PROJECT_ROOT/apps/crixa-task-manager-helper.py"
+require_file "$PROJECT_ROOT/apps/org.crixa.pulse.policy"
 require_file "$PROJECT_ROOT/store-backends/backend-crixa-repo.py"
 require_file "$PROJECT_ROOT/store-backends/backend-flatpak.py"
 require_file "$PROJECT_ROOT/store-backends/crixa-store-system-helper.py"
@@ -240,8 +248,16 @@ install -m 0755 "$PROJECT_ROOT/apps/crixa-store.sh" "$ROOTFS_DIR/usr/local/bin/c
 install -m 0755 "$PROJECT_ROOT/apps/crixa-store.py" "$ROOTFS_DIR/usr/local/bin/crixa-store.py"
 install -m 0755 "$PROJECT_ROOT/apps/crixa-installer.sh" "$ROOTFS_DIR/usr/local/bin/crixa-installer"
 install -m 0755 "$PROJECT_ROOT/apps/crixa-installer.py" "$ROOTFS_DIR/usr/local/bin/crixa-installer.py"
+install -d "$ROOTFS_DIR/usr/lib/crixa-installer"
+install -m 0755 "$PROJECT_ROOT/apps/crixa-installer-helper.py" "$ROOTFS_DIR/usr/lib/crixa-installer/crixa-installer-helper.py"
+install -d "$ROOTFS_DIR/usr/share/polkit-1/actions"
+install -m 0644 "$PROJECT_ROOT/apps/org.crixa.dockyard.policy" "$ROOTFS_DIR/usr/share/polkit-1/actions/org.crixa.dockyard.policy"
 install -m 0755 "$PROJECT_ROOT/apps/crixa-updater.sh" "$ROOTFS_DIR/usr/local/bin/crixa-updater"
 install -m 0755 "$PROJECT_ROOT/apps/crixa-updater.py" "$ROOTFS_DIR/usr/local/bin/crixa-updater.py"
+install -d "$ROOTFS_DIR/usr/lib/crixa-updater"
+install -m 0755 "$PROJECT_ROOT/apps/crixa-updater-helper.py" "$ROOTFS_DIR/usr/lib/crixa-updater/crixa-updater-helper.py"
+install -d "$ROOTFS_DIR/usr/share/polkit-1/actions"
+install -m 0644 "$PROJECT_ROOT/apps/org.crixa.transit.policy" "$ROOTFS_DIR/usr/share/polkit-1/actions/org.crixa.transit.policy"
 install -m 0755 "$PROJECT_ROOT/apps/crixa-session-mode.sh" "$ROOTFS_DIR/usr/local/bin/crixa-session-mode"
 install -m 0755 "$PROJECT_ROOT/apps/crixa-wayland-control.sh" "$ROOTFS_DIR/usr/local/bin/crixa-wayland-control"
 install -m 0755 "$PROJECT_ROOT/apps/crixa-wayland-control.py" "$ROOTFS_DIR/usr/local/bin/crixa-wayland-control.py"
@@ -258,6 +274,10 @@ install -m 0755 "$PROJECT_ROOT/apps/crixa-wallpaper.sh" "$ROOTFS_DIR/usr/local/b
 install -m 0755 "$PROJECT_ROOT/apps/crixa-screenshot.sh" "$ROOTFS_DIR/usr/local/bin/crixa-screenshot"
 install -m 0755 "$PROJECT_ROOT/apps/crixa-task-manager.sh" "$ROOTFS_DIR/usr/local/bin/crixa-task-manager"
 install -m 0755 "$PROJECT_ROOT/apps/crixa-task-manager.py" "$ROOTFS_DIR/usr/local/bin/crixa-task-manager.py"
+install -d "$ROOTFS_DIR/usr/lib/crixa-task-manager"
+install -m 0755 "$PROJECT_ROOT/apps/crixa-task-manager-helper.py" "$ROOTFS_DIR/usr/lib/crixa-task-manager/crixa-task-manager-helper.py"
+install -d "$ROOTFS_DIR/usr/share/polkit-1/actions"
+install -m 0644 "$PROJECT_ROOT/apps/org.crixa.pulse.policy" "$ROOTFS_DIR/usr/share/polkit-1/actions/org.crixa.pulse.policy"
 install -m 0755 "$PROJECT_ROOT/apps/crixa-fetch.sh" "$ROOTFS_DIR/usr/local/bin/crixa-fetch"
 install -m 0755 "$PROJECT_ROOT/apps/crixa-shell-bootstrap.sh" "$ROOTFS_DIR/usr/local/bin/crixa-shell-bootstrap"
 install -m 0755 "$PROJECT_ROOT/apps/fastfetch.sh" "$ROOTFS_DIR/usr/local/bin/fastfetch"
@@ -449,8 +469,10 @@ EOF
     xwayland
     bluedevil
     firefox-esr
+    whiptail
     python3-tk
     python3-pyside2.qtwidgets
+    python3-psutil
     linux-headers-amd64
     dkms
     firmware-linux
@@ -542,7 +564,7 @@ EOF
   if ! chroot "$ROOTFS_DIR" /bin/bash -lc "dpkg -s grub-common grub2-common grub-pc-bin grub-efi-amd64-bin >/dev/null 2>&1"; then
     echo "Installer runtime packages missing in rootfs; installing required dependencies"
     chroot_apt_update
-    chroot_apt_install grub-common grub2-common grub-pc-bin grub-efi-amd64-bin rsync parted gdisk dosfstools e2fsprogs
+    chroot_apt_install grub-common grub2-common grub-pc-bin grub-efi-amd64-bin rsync parted gdisk dosfstools e2fsprogs whiptail
   fi
   if ! chroot "$ROOTFS_DIR" /bin/bash -lc "command -v flatpak >/dev/null 2>&1"; then
     echo "Flatpak runtime missing in rootfs; installing"

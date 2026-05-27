@@ -259,6 +259,68 @@ def cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_plan(args: argparse.Namespace) -> int:
+    local = read_local_release()
+    track = (args.track or local.get("track", "stable")).lower()
+    machine_id = machine_identity(args.machine_id or "")
+    try:
+        manifest = read_updates_manifest(require_signature=not args.no_verify)
+    except Exception as exc:
+        payload = {"ok": False, "error": str(exc), "current": local, "plan": {"actionable": False}}
+        if args.json:
+            print(json.dumps(payload, indent=2))
+            return 1
+        print(f"plan failed: {exc}", file=sys.stderr)
+        return 1
+
+    status = evaluate_release(
+        current_version=str(local.get("version", "0.0.0")),
+        track=track,
+        machine_id=machine_id,
+        manifest=manifest,
+    )
+    payload_info = status.get("payload", {})
+    if not isinstance(payload_info, dict):
+        payload_info = {}
+    update_available = not bool(status.get("up_to_date", False))
+    payload_ready = bool(str(payload_info.get("url", "")).strip() or str(payload_info.get("filename", "")).strip())
+    sha_ready = bool(str(payload_info.get("sha256", "")).strip())
+    actionable = bool(status.get("eligible", False)) and update_available and payload_ready and sha_ready
+    reason = str(status.get("reason", "unknown"))
+    if update_available and bool(status.get("eligible", False)) and not actionable:
+        reason = "payload_not_ready"
+
+    payload = {
+        "ok": True,
+        "current": local,
+        "manifest_generated_at": str(manifest.get("generated_at", "")),
+        "machine_id_hash": hashlib.sha256(machine_id.encode("utf-8")).hexdigest()[:12],
+        "status": status,
+        "plan": {
+            "track": track,
+            "current_version": str(local.get("version", "0.0.0")),
+            "target_version": str(status.get("release_version", local.get("version", "0.0.0"))),
+            "update_available": update_available,
+            "eligible": bool(status.get("eligible", False)),
+            "actionable": actionable,
+            "reason": reason,
+            "payload": payload_info,
+        },
+    }
+    if args.json:
+        print(json.dumps(payload, indent=2))
+    else:
+        plan = payload["plan"]
+        print(f"track: {plan['track']}")
+        print(f"current: {plan['current_version']}")
+        print(f"target: {plan['target_version']}")
+        print(f"available: {plan['update_available']}")
+        print(f"eligible: {plan['eligible']}")
+        print(f"actionable: {plan['actionable']}")
+        print(f"reason: {plan['reason']}")
+    return 0 if payload["ok"] else 1
+
+
 def cmd_switch_track(args: argparse.Namespace) -> int:
     track = args.track.lower().strip()
     try:
@@ -315,6 +377,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_status.add_argument("--no-verify", action="store_true", help="skip signature verification")
     p_status.add_argument("--json", action="store_true")
     p_status.set_defaults(func=cmd_status)
+
+    p_plan = sub.add_parser("plan", help="show staged system rollout plan")
+    p_plan.add_argument("--track", default="", help="override track for this query")
+    p_plan.add_argument("--machine-id", default="", help="override machine id for testing rollout buckets")
+    p_plan.add_argument("--no-verify", action="store_true", help="skip signature verification")
+    p_plan.add_argument("--json", action="store_true")
+    p_plan.set_defaults(func=cmd_plan)
 
     p_switch = sub.add_parser("switch-track", help="change local update track")
     p_switch.add_argument("track", help="channel name (stable/beta/canary/etc)")

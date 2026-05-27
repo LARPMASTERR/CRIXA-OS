@@ -272,8 +272,10 @@ apt-get install -y --no-install-recommends \
   papirus-icon-theme \
   desktop-file-utils \
   neofetch \
+  whiptail \
   python3-tk \
   python3-pyside2.qtwidgets \
+  python3-psutil \
   plymouth \
   plymouth-themes
 
@@ -434,8 +436,16 @@ install_crixa_assets() {
   install -m 0755 "$PROJECT_ROOT/apps/crixa-store.py" "$ROOTFS_DIR/usr/local/bin/crixa-store.py"
   install -m 0755 "$PROJECT_ROOT/apps/crixa-installer.sh" "$ROOTFS_DIR/usr/local/bin/crixa-installer"
   install -m 0755 "$PROJECT_ROOT/apps/crixa-installer.py" "$ROOTFS_DIR/usr/local/bin/crixa-installer.py"
+  install -d "$ROOTFS_DIR/usr/lib/crixa-installer"
+  install -m 0755 "$PROJECT_ROOT/apps/crixa-installer-helper.py" "$ROOTFS_DIR/usr/lib/crixa-installer/crixa-installer-helper.py"
+  install -d "$ROOTFS_DIR/usr/share/polkit-1/actions"
+  install -m 0644 "$PROJECT_ROOT/apps/org.crixa.dockyard.policy" "$ROOTFS_DIR/usr/share/polkit-1/actions/org.crixa.dockyard.policy"
   install -m 0755 "$PROJECT_ROOT/apps/crixa-updater.sh" "$ROOTFS_DIR/usr/local/bin/crixa-updater"
   install -m 0755 "$PROJECT_ROOT/apps/crixa-updater.py" "$ROOTFS_DIR/usr/local/bin/crixa-updater.py"
+  install -d "$ROOTFS_DIR/usr/lib/crixa-updater"
+  install -m 0755 "$PROJECT_ROOT/apps/crixa-updater-helper.py" "$ROOTFS_DIR/usr/lib/crixa-updater/crixa-updater-helper.py"
+  install -d "$ROOTFS_DIR/usr/share/polkit-1/actions"
+  install -m 0644 "$PROJECT_ROOT/apps/org.crixa.transit.policy" "$ROOTFS_DIR/usr/share/polkit-1/actions/org.crixa.transit.policy"
   install -m 0755 "$PROJECT_ROOT/apps/crixa-session-mode.sh" "$ROOTFS_DIR/usr/local/bin/crixa-session-mode"
   install -m 0755 "$PROJECT_ROOT/apps/crixa-wayland-control.sh" "$ROOTFS_DIR/usr/local/bin/crixa-wayland-control"
   install -m 0755 "$PROJECT_ROOT/apps/crixa-wayland-control.py" "$ROOTFS_DIR/usr/local/bin/crixa-wayland-control.py"
@@ -452,6 +462,10 @@ install_crixa_assets() {
   install -m 0755 "$PROJECT_ROOT/apps/crixa-screenshot.sh" "$ROOTFS_DIR/usr/local/bin/crixa-screenshot"
   install -m 0755 "$PROJECT_ROOT/apps/crixa-task-manager.sh" "$ROOTFS_DIR/usr/local/bin/crixa-task-manager"
   install -m 0755 "$PROJECT_ROOT/apps/crixa-task-manager.py" "$ROOTFS_DIR/usr/local/bin/crixa-task-manager.py"
+  install -d "$ROOTFS_DIR/usr/lib/crixa-task-manager"
+  install -m 0755 "$PROJECT_ROOT/apps/crixa-task-manager-helper.py" "$ROOTFS_DIR/usr/lib/crixa-task-manager/crixa-task-manager-helper.py"
+  install -d "$ROOTFS_DIR/usr/share/polkit-1/actions"
+  install -m 0644 "$PROJECT_ROOT/apps/org.crixa.pulse.policy" "$ROOTFS_DIR/usr/share/polkit-1/actions/org.crixa.pulse.policy"
   install -m 0755 "$PROJECT_ROOT/apps/crixa-fetch.sh" "$ROOTFS_DIR/usr/local/bin/crixa-fetch"
   install -m 0755 "$PROJECT_ROOT/apps/crixa-shell-bootstrap.sh" "$ROOTFS_DIR/usr/local/bin/crixa-shell-bootstrap"
   install -m 0755 "$PROJECT_ROOT/apps/fastfetch.sh" "$ROOTFS_DIR/usr/local/bin/fastfetch"
@@ -672,8 +686,12 @@ main() {
   require_file "$PROJECT_ROOT/apps/crixa-install.sh"
   require_file "$PROJECT_ROOT/apps/crixa-installer.sh"
   require_file "$PROJECT_ROOT/apps/crixa-installer.py"
+  require_file "$PROJECT_ROOT/apps/crixa-installer-helper.py"
+  require_file "$PROJECT_ROOT/apps/org.crixa.dockyard.policy"
   require_file "$PROJECT_ROOT/apps/crixa-updater.sh"
   require_file "$PROJECT_ROOT/apps/crixa-updater.py"
+  require_file "$PROJECT_ROOT/apps/crixa-updater-helper.py"
+  require_file "$PROJECT_ROOT/apps/org.crixa.transit.policy"
   require_file "$PROJECT_ROOT/apps/crixa-session-mode.sh"
   require_file "$PROJECT_ROOT/apps/crixa-wayland-control.sh"
   require_file "$PROJECT_ROOT/apps/crixa-wayland-control.py"
@@ -689,6 +707,8 @@ main() {
   require_file "$PROJECT_ROOT/apps/crixa-screenshot.sh"
   require_file "$PROJECT_ROOT/apps/crixa-task-manager.sh"
   require_file "$PROJECT_ROOT/apps/crixa-task-manager.py"
+  require_file "$PROJECT_ROOT/apps/crixa-task-manager-helper.py"
+  require_file "$PROJECT_ROOT/apps/org.crixa.pulse.policy"
   require_file "$PROJECT_ROOT/apps/crixa-fetch.sh"
   require_file "$PROJECT_ROOT/apps/crixa-shell-bootstrap.sh"
   require_file "$PROJECT_ROOT/apps/fastfetch.sh"

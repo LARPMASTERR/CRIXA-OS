@@ -1,256 +1,694 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import argparse
 import json
+import os
+import shutil
 import subprocess
-import threading
-import tkinter as tk
+import sys
+from dataclasses import dataclass
 from pathlib import Path
-from queue import Empty, Queue
-from tkinter import messagebox, ttk
 
-INSTALLER_BIN = "/usr/local/sbin/crixa-install"
+try:
+    from PySide2 import QtCore, QtGui, QtWidgets
+
+    QT_IMPORT_ERROR: Exception | None = None
+except Exception as exc:  # pragma: no cover - depends on host packages
+    class _MissingQtWidgets:
+        QMainWindow = object
+
+    class _MissingQtCore:
+        class QProcess:
+            class ExitStatus:
+                pass
+
+    QtCore = _MissingQtCore()  # type: ignore[assignment]
+    QtGui = object()  # type: ignore[assignment]
+    QtWidgets = _MissingQtWidgets()  # type: ignore[assignment]
+    QT_IMPORT_ERROR = exc
 
 
-def run_cmd(args: list[str]) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(args, capture_output=True, text=True, check=False)
+APP_NAME = "Dockyard"
+DEFAULT_LOG = "/var/log/crixa-installer.log"
 
 
-class CrixaInstaller(tk.Tk):
+def first_existing(paths: list[Path]) -> Path:
+    for path in paths:
+        if path.exists():
+            return path
+    return paths[0]
+
+
+INSTALLER_BIN = first_existing([Path("/usr/local/sbin/crixa-install"), Path(__file__).resolve().with_name("crixa-install.sh")])
+HELPER_BIN = first_existing(
+    [Path("/usr/lib/crixa-installer/crixa-installer-helper.py"), Path(__file__).resolve().with_name("crixa-installer-helper.py")]
+)
+
+
+@dataclass
+class DiskInfo:
+    path: str
+    size: str
+    model: str
+    transport: str
+    removable: bool
+    rotational: bool
+    serial: str
+    mounted_children: list[str]
+
+    @property
+    def kind(self) -> str:
+        if self.removable:
+            return "Removable"
+        if self.rotational:
+            return "Hard disk"
+        return "Solid-state"
+
+    @property
+    def risk(self) -> str:
+        mounted = ", ".join(self.mounted_children)
+        if mounted:
+            return f"Mounted partitions detected: {mounted}"
+        return "Ready for guided full-disk install"
+
+
+def command_for(path: Path) -> list[str]:
+    if path.suffix == ".py" and not os.access(path, os.X_OK):
+        return [sys.executable, str(path)]
+    if path.suffix == ".sh" and not os.access(path, os.X_OK):
+        return ["bash", str(path)]
+    return [str(path)]
+
+
+def installer_command() -> list[str]:
+    return command_for(INSTALLER_BIN)
+
+
+def helper_command() -> list[str]:
+    return command_for(HELPER_BIN)
+
+
+def run_cmd(args: list[str], timeout: int = 30) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(args, capture_output=True, text=True, check=False, timeout=timeout)
+
+
+def run_json(args: list[str], timeout: int = 30) -> dict:
+    result = run_cmd(args, timeout=timeout)
+    if result.returncode != 0:
+        raise RuntimeError((result.stderr or result.stdout).strip() or f"command failed: {' '.join(args)}")
+    try:
+        return json.loads(result.stdout or "{}")
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"invalid JSON from {' '.join(args)}") from exc
+
+
+def probe_disks() -> list[DiskInfo]:
+    payload = run_json(installer_command() + ["--probe", "--json"])
+    rows: list[DiskInfo] = []
+    for item in payload.get("disks", []):
+        if not isinstance(item, dict):
+            continue
+        rows.append(
+            DiskInfo(
+                path=str(item.get("path", "")),
+                size=str(item.get("size", "?")),
+                model=str(item.get("model", "Unknown")),
+                transport=str(item.get("transport", "")),
+                removable=bool(item.get("removable", False)),
+                rotational=bool(item.get("rotational", False)),
+                serial=str(item.get("serial", "")),
+                mounted_children=[str(mp) for mp in item.get("mounted_children", []) if mp],
+            )
+        )
+    return [row for row in rows if row.path]
+
+
+def base_install_args(target: str, hostname: str, user: str, timezone: str, password: str, label: str = "CRIXA_ROOT") -> list[str]:
+    args = [
+        "--target",
+        target,
+        "--hostname",
+        hostname or "crixa-os",
+        "--user",
+        user or "crixa",
+        "--label",
+        label or "CRIXA_ROOT",
+        "--timezone",
+        timezone or "UTC",
+    ]
+    if password:
+        args += ["--user-password", password]
+    return args
+
+
+def build_install_command(target: str, hostname: str, user: str, timezone: str, password: str) -> list[str]:
+    args = base_install_args(target, hostname, user, timezone, password)
+    if os.geteuid() == 0:
+        return installer_command() + args + ["--yes", "--json", "--log", DEFAULT_LOG]
+    if HELPER_BIN.exists() and shutil.which("pkexec"):
+        return ["pkexec"] + helper_command() + ["install"] + args + ["--log", DEFAULT_LOG]
+    raise RuntimeError("Dockyard needs pkexec and the installer helper for privileged installs")
+
+
+def build_dry_run_command(target: str, hostname: str, user: str, timezone: str, password: str) -> list[str]:
+    return installer_command() + base_install_args(target, hostname, user, timezone, password) + ["--dry-run", "--yes", "--json"]
+
+
+def stylesheet() -> str:
+    return """
+    QWidget {
+      background: #101721;
+      color: #edf2f7;
+      font-family: "Inter", "DejaVu Sans", sans-serif;
+      font-size: 10.5pt;
+    }
+    QMainWindow, QDialog { background: #101721; }
+    QLabel#Title { font-size: 24px; font-weight: 700; color: #ffffff; }
+    QLabel#Subtitle { color: #9fb1c6; }
+    QLabel#Metric {
+      background: #172230;
+      border: 1px solid #27364a;
+      border-radius: 8px;
+      padding: 12px;
+      font-weight: 600;
+    }
+    QFrame#Panel {
+      background: #141f2c;
+      border: 1px solid #263549;
+      border-radius: 8px;
+    }
+    QTableWidget, QTextEdit {
+      background: #0c131d;
+      border: 1px solid #263549;
+      border-radius: 8px;
+      gridline-color: #263549;
+      selection-background-color: #2f7dd1;
+    }
+    QHeaderView::section {
+      background: #192536;
+      color: #dbe7f5;
+      border: 0;
+      padding: 7px;
+      font-weight: 600;
+    }
+    QLineEdit {
+      background: #0c131d;
+      border: 1px solid #304158;
+      border-radius: 6px;
+      padding: 8px;
+      selection-background-color: #2f7dd1;
+    }
+    QPushButton {
+      background: #223247;
+      border: 1px solid #344860;
+      border-radius: 7px;
+      padding: 8px 12px;
+      font-weight: 600;
+    }
+    QPushButton:hover { background: #2b405b; }
+    QPushButton:pressed { background: #1c2a3c; }
+    QPushButton#Primary { background: #2f7dd1; border-color: #4e9beb; color: white; }
+    QPushButton#Danger { background: #8f3434; border-color: #ba4f4f; color: white; }
+    QPushButton:disabled { color: #6f7f91; background: #17202b; border-color: #253244; }
+    QProgressBar {
+      background: #0c131d;
+      border: 1px solid #304158;
+      border-radius: 6px;
+      text-align: center;
+      height: 20px;
+    }
+    QProgressBar::chunk { background: #5db7a7; border-radius: 5px; }
+    """
+
+
+class DockyardWindow(QtWidgets.QMainWindow):  # type: ignore[misc]
     def __init__(self) -> None:
         super().__init__()
-        self.title("Dockyard")
-        self.geometry("980x700")
-        self.minsize(860, 620)
-        self.configure(bg="#09152a")
-
-        self.style = ttk.Style(self)
-        try:
-            self.style.theme_use("clam")
-        except tk.TclError:
-            pass
-        self.style.configure(".", font=("DejaVu Sans", 10))
-
-        self.queue: Queue[tuple[str, str]] = Queue()
-        self.worker: threading.Thread | None = None
-        self.proc: subprocess.Popen[str] | None = None
-
-        self.disk_var = tk.StringVar()
-        self.hostname_var = tk.StringVar(value="crixa-os")
-        self.user_var = tk.StringVar(value="crixa")
-        self.timezone_var = tk.StringVar(value="UTC")
-        self.password_var = tk.StringVar(value="")
-        self.status_var = tk.StringVar(value="Select a target disk and click Install.")
-        self.disk_values: list[str] = []
+        self.setWindowTitle(APP_NAME)
+        self.resize(1120, 760)
+        self.setMinimumSize(980, 680)
+        self.disks: list[DiskInfo] = []
+        self.proc: QtCore.QProcess | None = None
+        self.output_buffer = ""
 
         self._build_ui()
         self.refresh_disks()
-        self.after(120, self._drain_queue)
 
     def _build_ui(self) -> None:
-        root = ttk.Frame(self)
-        root.pack(fill="both", expand=True, padx=14, pady=14)
+        root = QtWidgets.QWidget()
+        self.setCentralWidget(root)
+        layout = QtWidgets.QVBoxLayout(root)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(14)
 
-        header = ttk.Label(
-            root,
-            text="Dockyard",
-            font=("DejaVu Sans", 16, "bold"),
-        )
-        header.pack(anchor="w", pady=(0, 6))
-        ttk.Label(
-            root,
-            text="This installs CRIXA from live mode to a disk. The selected disk will be fully erased.",
-        ).pack(anchor="w", pady=(0, 12))
+        header = QtWidgets.QHBoxLayout()
+        title_col = QtWidgets.QVBoxLayout()
+        title = QtWidgets.QLabel("Dockyard")
+        title.setObjectName("Title")
+        subtitle = QtWidgets.QLabel("Guided full-disk installs with dry-run preview, visible stages, and logged recovery details.")
+        subtitle.setObjectName("Subtitle")
+        title_col.addWidget(title)
+        title_col.addWidget(subtitle)
+        header.addLayout(title_col, 1)
+        self.refresh_btn = QtWidgets.QPushButton(QtGui.QIcon.fromTheme("view-refresh"), "Refresh")
+        self.refresh_btn.clicked.connect(self.refresh_disks)
+        header.addWidget(self.refresh_btn)
+        self.terminal_btn = QtWidgets.QPushButton(QtGui.QIcon.fromTheme("utilities-terminal"), "Terminal Mode")
+        self.terminal_btn.clicked.connect(self.open_terminal_mode)
+        header.addWidget(self.terminal_btn)
+        layout.addLayout(header)
 
-        form = ttk.LabelFrame(root, text="Install Target")
-        form.pack(fill="x", pady=(0, 10))
-        form.columnconfigure(1, weight=1)
+        metrics = QtWidgets.QHBoxLayout()
+        self.disk_count = QtWidgets.QLabel("Disks\n0 detected")
+        self.disk_count.setObjectName("Metric")
+        self.target_metric = QtWidgets.QLabel("Target\nNone selected")
+        self.target_metric.setObjectName("Metric")
+        self.mode_metric = QtWidgets.QLabel("Mode\nGuided full-disk")
+        self.mode_metric.setObjectName("Metric")
+        metrics.addWidget(self.disk_count)
+        metrics.addWidget(self.target_metric)
+        metrics.addWidget(self.mode_metric)
+        layout.addLayout(metrics)
 
-        ttk.Label(form, text="Disk:").grid(row=0, column=0, sticky="w", padx=12, pady=(10, 6))
-        self.disk_combo = ttk.Combobox(form, textvariable=self.disk_var, state="readonly")
-        self.disk_combo.grid(row=0, column=1, sticky="ew", padx=(0, 12), pady=(10, 6))
-        ttk.Button(form, text="Refresh", command=self.refresh_disks).grid(row=0, column=2, padx=(0, 12), pady=(10, 6))
+        body = QtWidgets.QHBoxLayout()
+        layout.addLayout(body, 1)
 
-        ttk.Label(form, text="Hostname:").grid(row=1, column=0, sticky="w", padx=12, pady=6)
-        ttk.Entry(form, textvariable=self.hostname_var).grid(row=1, column=1, sticky="ew", padx=(0, 12), pady=6)
+        left = QtWidgets.QFrame()
+        left.setObjectName("Panel")
+        left_layout = QtWidgets.QVBoxLayout(left)
+        left_layout.setContentsMargins(12, 12, 12, 12)
+        left_layout.addWidget(QtWidgets.QLabel("Install Target"))
+        self.disk_table = QtWidgets.QTableWidget(0, 5)
+        self.disk_table.setHorizontalHeaderLabels(["Device", "Size", "Model", "Kind", "State"])
+        self.disk_table.horizontalHeader().setStretchLastSection(True)
+        self.disk_table.horizontalHeader().setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeToContents)
+        self.disk_table.horizontalHeader().setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents)
+        self.disk_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        self.disk_table.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
+        self.disk_table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        self.disk_table.itemSelectionChanged.connect(self.update_target_summary)
+        left_layout.addWidget(self.disk_table, 1)
+        self.risk_label = QtWidgets.QLabel("Select a disk to see install risk.")
+        self.risk_label.setWordWrap(True)
+        left_layout.addWidget(self.risk_label)
+        body.addWidget(left, 3)
 
-        ttk.Label(form, text="User:").grid(row=2, column=0, sticky="w", padx=12, pady=6)
-        ttk.Entry(form, textvariable=self.user_var).grid(row=2, column=1, sticky="ew", padx=(0, 12), pady=6)
+        right = QtWidgets.QFrame()
+        right.setObjectName("Panel")
+        right_layout = QtWidgets.QVBoxLayout(right)
+        right_layout.setContentsMargins(12, 12, 12, 12)
+        right_layout.addWidget(QtWidgets.QLabel("System Setup"))
+        form = QtWidgets.QFormLayout()
+        self.hostname = QtWidgets.QLineEdit("crixa-os")
+        self.username = QtWidgets.QLineEdit("crixa")
+        self.timezone = QtWidgets.QLineEdit("UTC")
+        self.password = QtWidgets.QLineEdit()
+        self.password.setEchoMode(QtWidgets.QLineEdit.Password)
+        form.addRow("Hostname", self.hostname)
+        form.addRow("Primary user", self.username)
+        form.addRow("Timezone", self.timezone)
+        form.addRow("Password", self.password)
+        right_layout.addLayout(form)
 
-        ttk.Label(form, text="Timezone:").grid(row=3, column=0, sticky="w", padx=12, pady=6)
-        ttk.Entry(form, textvariable=self.timezone_var).grid(row=3, column=1, sticky="ew", padx=(0, 12), pady=6)
+        self.progress = QtWidgets.QProgressBar()
+        self.progress.setRange(0, 100)
+        self.progress.setValue(0)
+        right_layout.addWidget(self.progress)
+        self.status = QtWidgets.QLabel("Ready")
+        self.status.setWordWrap(True)
+        right_layout.addWidget(self.status)
 
-        ttk.Label(form, text="User Password (optional):").grid(row=4, column=0, sticky="w", padx=12, pady=(6, 10))
-        ttk.Entry(form, textvariable=self.password_var, show="*").grid(row=4, column=1, sticky="ew", padx=(0, 12), pady=(6, 10))
+        actions = QtWidgets.QGridLayout()
+        self.dry_run_btn = QtWidgets.QPushButton(QtGui.QIcon.fromTheme("document-preview"), "Dry Run")
+        self.dry_run_btn.clicked.connect(self.start_dry_run)
+        self.install_btn = QtWidgets.QPushButton(QtGui.QIcon.fromTheme("drive-harddisk"), "Install CRIXA")
+        self.install_btn.setObjectName("Danger")
+        self.install_btn.clicked.connect(self.start_install)
+        self.log_btn = QtWidgets.QPushButton(QtGui.QIcon.fromTheme("text-x-log"), "Open Log")
+        self.log_btn.clicked.connect(self.open_log)
+        self.close_btn = QtWidgets.QPushButton("Close")
+        self.close_btn.clicked.connect(self.close)
+        actions.addWidget(self.dry_run_btn, 0, 0)
+        actions.addWidget(self.install_btn, 0, 1)
+        actions.addWidget(self.log_btn, 1, 0)
+        actions.addWidget(self.close_btn, 1, 1)
+        right_layout.addLayout(actions)
+        right_layout.addStretch(1)
+        body.addWidget(right, 2)
 
-        actions = ttk.Frame(root)
-        actions.pack(fill="x", pady=(0, 8))
-        self.install_btn = ttk.Button(actions, text="Install CRIXA", command=self.start_install)
-        self.install_btn.pack(side="left", padx=(0, 8))
-        ttk.Button(actions, text="Open Installer Log", command=self.open_log).pack(side="left", padx=8)
-        ttk.Button(actions, text="Close", command=self.destroy).pack(side="right")
+        log_panel = QtWidgets.QFrame()
+        log_panel.setObjectName("Panel")
+        log_layout = QtWidgets.QVBoxLayout(log_panel)
+        log_layout.setContentsMargins(12, 12, 12, 12)
+        log_layout.addWidget(QtWidgets.QLabel("Install Log"))
+        self.log = QtWidgets.QTextEdit()
+        self.log.setReadOnly(True)
+        self.log.setMinimumHeight(150)
+        self.log.append("Dockyard ready.")
+        log_layout.addWidget(self.log)
+        layout.addWidget(log_panel)
 
-        ttk.Label(root, textvariable=self.status_var).pack(anchor="w", pady=(0, 6))
-
-        log_wrap = ttk.LabelFrame(root, text="Live Log")
-        log_wrap.pack(fill="both", expand=True)
-        self.log_text = tk.Text(
-            log_wrap,
-            wrap="word",
-            bg="#071223",
-            fg="#dbeafe",
-            insertbackground="#dbeafe",
-            relief="flat",
-            padx=10,
-            pady=10,
-        )
-        self.log_text.pack(fill="both", expand=True, padx=8, pady=8)
-        self.log_text.insert("end", "Dockyard ready.\n")
-        self.log_text.configure(state="disabled")
-
-    def append_log(self, line: str) -> None:
-        self.log_text.configure(state="normal")
-        self.log_text.insert("end", line)
-        self.log_text.see("end")
-        self.log_text.configure(state="disabled")
+    def selected_disk(self) -> DiskInfo | None:
+        rows = self.disk_table.selectionModel().selectedRows()
+        if not rows:
+            return None
+        idx = rows[0].row()
+        if idx < 0 or idx >= len(self.disks):
+            return None
+        return self.disks[idx]
 
     def refresh_disks(self) -> None:
-        result = run_cmd(["lsblk", "-J", "-o", "PATH,SIZE,MODEL,TYPE,RM"])
-        if result.returncode != 0:
-            self.status_var.set("Failed to enumerate disks.")
-            return
+        self.set_busy(True, "Scanning disks...")
         try:
-            payload = json.loads(result.stdout or "{}")
-        except json.JSONDecodeError:
-            self.status_var.set("lsblk returned invalid JSON.")
+            self.disks = probe_disks()
+            self.populate_disks()
+            self.status.setText(f"Detected {len(self.disks)} installable disk(s).")
+            self.progress.setValue(0)
+        except Exception as exc:
+            self.status.setText(f"Disk scan failed: {exc}")
+            self.append_log(f"Disk scan failed: {exc}")
+        finally:
+            self.set_busy(False)
+
+    def populate_disks(self) -> None:
+        self.disk_table.setRowCount(len(self.disks))
+        for row, disk in enumerate(self.disks):
+            state = "Mounted" if disk.mounted_children else "Available"
+            values = [disk.path, disk.size, disk.model, disk.kind, state]
+            for col, value in enumerate(values):
+                item = QtWidgets.QTableWidgetItem(value)
+                if state == "Mounted":
+                    item.setForeground(QtGui.QColor("#f2b84b"))
+                self.disk_table.setItem(row, col, item)
+        if self.disks:
+            self.disk_table.selectRow(0)
+        self.disk_count.setText(f"Disks\n{len(self.disks)} detected")
+        self.update_target_summary()
+
+    def update_target_summary(self) -> None:
+        disk = self.selected_disk()
+        if disk is None:
+            self.target_metric.setText("Target\nNone selected")
+            self.risk_label.setText("Select a disk to see install risk.")
             return
+        self.target_metric.setText(f"Target\n{disk.path}  {disk.size}")
+        self.risk_label.setText(
+            f"{disk.path} will be erased and repartitioned as BIOS boot, EFI, and ext4 root. {disk.risk}"
+        )
 
-        devices = []
-        for item in payload.get("blockdevices", []):
-            if not isinstance(item, dict):
-                continue
-            if item.get("type") != "disk":
-                continue
-            path = str(item.get("path") or "").strip()
-            if not path:
-                continue
-            if path.startswith("/dev/loop") or path.startswith("/dev/ram") or path.startswith("/dev/zram"):
-                continue
-            if path.startswith("/dev/sr"):
-                continue
-            size = str(item.get("size") or "?")
-            model = str(item.get("model") or "").strip() or "Unknown"
-            rm = str(item.get("rm") or "0")
-            removable = "removable" if rm == "1" else "fixed"
-            label = f"{path}  |  {size}  |  {model}  |  {removable}"
-            devices.append(label)
+    def append_log(self, text: str) -> None:
+        if not text:
+            return
+        self.log.append(text.rstrip())
+        self.log.moveCursor(QtGui.QTextCursor.End)
 
-        self.disk_values = devices
-        self.disk_combo.configure(values=devices)
-        if devices and not self.disk_var.get():
-            self.disk_var.set(devices[0])
-        self.status_var.set(f"Detected {len(devices)} installable disk(s).")
+    def set_busy(self, busy: bool, message: str | None = None) -> None:
+        for widget in (self.refresh_btn, self.terminal_btn, self.dry_run_btn, self.install_btn, self.log_btn, self.close_btn):
+            widget.setEnabled(not busy)
+        if message:
+            self.status.setText(message)
 
-    def selected_disk(self) -> str:
-        value = self.disk_var.get().strip()
-        if not value:
-            return ""
-        return value.split("  |  ", 1)[0].strip()
+    def current_values(self) -> tuple[str, str, str, str, str]:
+        disk = self.selected_disk()
+        if disk is None:
+            raise RuntimeError("Select a target disk first")
+        return (
+            disk.path,
+            self.hostname.text().strip() or "crixa-os",
+            self.username.text().strip() or "crixa",
+            self.timezone.text().strip() or "UTC",
+            self.password.text(),
+        )
+
+    def start_dry_run(self) -> None:
+        try:
+            cmd = build_dry_run_command(*self.current_values())
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, APP_NAME, str(exc))
+            return
+        self.append_log("\n$ " + " ".join(cmd))
+        self.start_process(cmd, "Dry-run preview running...")
 
     def start_install(self) -> None:
-        if self.worker and self.worker.is_alive():
-            messagebox.showinfo("Installer Busy", "An install is already running.")
-            return
-        target = self.selected_disk()
-        if not target:
-            messagebox.showerror("No Target", "Choose a disk first.")
-            return
-
-        hostname = self.hostname_var.get().strip() or "crixa-os"
-        user = self.user_var.get().strip() or "crixa"
-        timezone = self.timezone_var.get().strip() or "UTC"
-        password = self.password_var.get()
-
-        if not messagebox.askyesno(
-            "Confirm Install",
-            f"This will erase all data on:\n{target}\n\nContinue?",
-        ):
-            return
-
-        cmd = [
-            "sudo",
-            "-n",
-            INSTALLER_BIN,
-            "--target",
-            target,
-            "--hostname",
-            hostname,
-            "--user",
-            user,
-            "--timezone",
-            timezone,
-            "--yes",
-        ]
-        if password:
-            cmd.extend(["--user-password", password])
-
-        self.install_btn.configure(state="disabled")
-        self.status_var.set(f"Dockyard is installing to {target} ...")
-        self.append_log(f"\n$ {' '.join(cmd)}\n")
-
-        self.worker = threading.Thread(target=self._run_installer, args=(cmd,), daemon=True)
-        self.worker.start()
-
-    def _run_installer(self, cmd: list[str]) -> None:
         try:
-            self.proc = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-            )
+            target, hostname, user, timezone, password = self.current_values()
         except Exception as exc:
-            self.queue.put(("status", f"Failed to start installer: {exc}"))
-            self.queue.put(("done", "1"))
+            QtWidgets.QMessageBox.warning(self, APP_NAME, str(exc))
             return
-
-        assert self.proc.stdout is not None
-        for line in self.proc.stdout:
-            self.queue.put(("log", line))
-        code = self.proc.wait()
-        self.queue.put(("status", "Install complete." if code == 0 else f"Installer failed (exit {code})."))
-        self.queue.put(("done", str(code)))
-
-    def _drain_queue(self) -> None:
+        first = QtWidgets.QMessageBox.question(
+            self,
+            "Confirm Install",
+            f"Dockyard will erase all data on {target} and install CRIXA OS.\n\nContinue?",
+        )
+        if first != QtWidgets.QMessageBox.Yes:
+            return
+        typed, ok = QtWidgets.QInputDialog.getText(self, "Type ERASE", f"Type ERASE to confirm destructive install to {target}:")
+        if not ok or typed.strip() != "ERASE":
+            self.status.setText("Install cancelled.")
+            return
         try:
-            while True:
-                kind, payload = self.queue.get_nowait()
-                if kind == "log":
-                    self.append_log(payload)
-                elif kind == "status":
-                    self.status_var.set(payload)
-                elif kind == "done":
-                    self.install_btn.configure(state="normal")
-        except Empty:
-            pass
-        self.after(120, self._drain_queue)
+            cmd = build_install_command(target, hostname, user, timezone, password)
+        except Exception as exc:
+            QtWidgets.QMessageBox.critical(self, APP_NAME, str(exc))
+            return
+        shown = list(cmd)
+        if password:
+            for idx, item in enumerate(shown[:-1]):
+                if item == "--user-password":
+                    shown[idx + 1] = "***"
+        self.append_log("\n$ " + " ".join(shown))
+        self.start_process(cmd, f"Installing CRIXA to {target}...")
+
+    def start_process(self, cmd: list[str], message: str) -> None:
+        if self.proc is not None:
+            return
+        self.output_buffer = ""
+        self.progress.setValue(0)
+        self.set_busy(True, message)
+        self.proc = QtCore.QProcess(self)
+        self.proc.setProgram(cmd[0])
+        self.proc.setArguments(cmd[1:])
+        self.proc.readyReadStandardOutput.connect(self.read_stdout)
+        self.proc.readyReadStandardError.connect(self.read_stderr)
+        self.proc.finished.connect(self.process_finished)
+        self.proc.start()
+        if not self.proc.waitForStarted(1500):
+            self.append_log(f"Failed to start: {cmd[0]}")
+            self.status.setText("Failed to start operation.")
+            self.proc = None
+            self.set_busy(False)
+
+    def read_stdout(self) -> None:
+        if self.proc is None:
+            return
+        self.output_buffer += bytes(self.proc.readAllStandardOutput()).decode(errors="replace")
+        while "\n" in self.output_buffer:
+            line, self.output_buffer = self.output_buffer.split("\n", 1)
+            self.handle_output_line(line.strip())
+
+    def read_stderr(self) -> None:
+        if self.proc is None:
+            return
+        text = bytes(self.proc.readAllStandardError()).decode(errors="replace").strip()
+        if text:
+            self.append_log(text)
+
+    def handle_output_line(self, line: str) -> None:
+        if not line:
+            return
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            self.append_log(line)
+            return
+        event = str(payload.get("event", "log"))
+        message = str(payload.get("message", ""))
+        if event == "stage":
+            self.progress.setValue(int(payload.get("progress", self.progress.value())))
+            self.status.setText(message)
+        elif event == "error":
+            self.status.setText(message)
+        elif event == "plan":
+            parts = payload.get("partitions", [])
+            self.append_log("Install plan:")
+            for part in (parts if isinstance(parts, list) else []):
+                self.append_log(f"  {part.get('path', '')}: {part.get('role', '')} {part.get('size', '')}")
+            return
+        if message:
+            self.append_log(message)
+
+    def process_finished(self, code: int, _status: QtCore.QProcess.ExitStatus) -> None:
+        if self.output_buffer.strip():
+            self.handle_output_line(self.output_buffer.strip())
+        self.proc = None
+        self.set_busy(False)
+        if code == 0:
+            if self.progress.value() < 100:
+                self.progress.setValue(100)
+            self.status.setText("Operation completed.")
+        else:
+            self.status.setText(f"Operation failed with exit code {code}.")
 
     def open_log(self) -> None:
-        log_path = Path("/var/log/crixa-installer.log")
-        if log_path.exists():
-            subprocess.Popen(["crixa-files", str(log_path.parent)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        else:
-            messagebox.showinfo("Log Not Found", "Installer log has not been created yet.")
+        path = Path(DEFAULT_LOG)
+        if path.exists():
+            opener = shutil.which("crixa-files") or shutil.which("xdg-open")
+            if opener:
+                subprocess.Popen([opener, str(path.parent)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                return
+        QtWidgets.QMessageBox.information(self, APP_NAME, "Installer log has not been created yet.")
+
+    def open_terminal_mode(self) -> None:
+        terminals = [
+            ["konsole", "-e", "crixa-installer", "--tui"],
+            ["alacritty", "-e", "crixa-installer", "--tui"],
+            ["xterm", "-e", "crixa-installer", "--tui"],
+        ]
+        for cmd in terminals:
+            if shutil.which(cmd[0]):
+                subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                return
+        QtWidgets.QMessageBox.information(self, APP_NAME, "No graphical terminal was found. Run: crixa-installer --tui")
+
+
+def dialog_binary() -> str:
+    return shutil.which("whiptail") or shutil.which("dialog") or ""
+
+
+def run_dialog(args: list[str]) -> tuple[int, str]:
+    exe = dialog_binary()
+    if not exe:
+        return 127, ""
+    result = subprocess.run([exe] + args, capture_output=True, text=True, check=False)
+    return result.returncode, (result.stdout or result.stderr).strip()
+
+
+def choose_disk_tui(disks: list[DiskInfo]) -> DiskInfo | None:
+    if not disks:
+        print("No installable disks detected.")
+        return None
+    exe = dialog_binary()
+    if exe:
+        menu: list[str] = ["--title", "Dockyard", "--menu", "Choose a target disk. The selected disk will be erased.", "20", "86", "10"]
+        for disk in disks:
+            menu.extend([disk.path, f"{disk.size}  {disk.model}  {disk.kind}"])
+        code, value = run_dialog(menu)
+        if code != 0:
+            return None
+        return next((disk for disk in disks if disk.path == value), None)
+    for idx, disk in enumerate(disks, start=1):
+        print(f"{idx}. {disk.path}  {disk.size}  {disk.model}  {disk.kind}")
+    raw = input("Target disk number: ").strip()
+    try:
+        idx = int(raw) - 1
+        return disks[idx]
+    except Exception:
+        return None
+
+
+def prompt_tui(label: str, default: str = "", password: bool = False) -> str:
+    exe = dialog_binary()
+    if exe:
+        flag = "--passwordbox" if password else "--inputbox"
+        code, value = run_dialog(["--title", "Dockyard", flag, label, "10", "70", default])
+        if code != 0:
+            raise RuntimeError("cancelled")
+        return value or default
+    if password:
+        import getpass
+
+        return getpass.getpass(label + ": ")
+    raw = input(f"{label} [{default}]: ").strip()
+    return raw or default
+
+
+def confirm_tui(target: str) -> bool:
+    exe = dialog_binary()
+    if exe:
+        code, _ = run_dialog(["--title", "Confirm Install", "--yesno", f"ERASE {target} and install CRIXA OS?", "10", "72"])
+        return code == 0
+    return input(f"Type ERASE to install to {target}: ").strip() == "ERASE"
+
+
+def run_tui(args: argparse.Namespace) -> int:
+    if args.self_test:
+        return run_self_test(tui=True)
+    try:
+        disks = probe_disks()
+        disk = choose_disk_tui(disks)
+        if disk is None:
+            return 1
+        hostname = prompt_tui("Hostname", "crixa-os")
+        user = prompt_tui("Primary user", "crixa")
+        timezone = prompt_tui("Timezone", "UTC")
+        password = prompt_tui("Password (blank allowed)", "", password=True)
+        dry_run_first = True
+        if dialog_binary():
+            code, _ = run_dialog(["--title", "Dry Run", "--yesno", "Run a non-destructive dry-run preview first?", "9", "68"])
+            dry_run_first = code == 0
+        if dry_run_first:
+            subprocess.run(build_dry_run_command(disk.path, hostname, user, timezone, password), check=False)
+        if not confirm_tui(disk.path):
+            print("Install cancelled.")
+            return 1
+        cmd = build_install_command(disk.path, hostname, user, timezone, password)
+        return subprocess.call(cmd)
+    except Exception as exc:
+        print(f"Dockyard TTY failed: {exc}", file=sys.stderr)
+        return 1
+
+
+def run_self_test(tui: bool = False) -> int:
+    checks: list[tuple[str, bool, str]] = []
+    checks.append(("backend", INSTALLER_BIN.exists() or shutil.which("crixa-install") is not None, str(INSTALLER_BIN)))
+    checks.append(("probe", shutil.which("lsblk") is not None, "lsblk is available"))
+    if tui:
+        checks.append(("terminal UI", bool(dialog_binary()), "whiptail/dialog available"))
+    else:
+        checks.append(("PySide2", QT_IMPORT_ERROR is None, str(QT_IMPORT_ERROR or "available")))
+    checks.append(("privileged helper", HELPER_BIN.exists(), str(HELPER_BIN)))
+    checks.append(("pkexec", shutil.which("pkexec") is not None or os.geteuid() == 0, "pkexec available or already root"))
+
+    ok = True
+    for name, passed, detail in checks:
+        required = name not in {"terminal UI", "pkexec"}
+        ok = ok and (passed or not required)
+        state = "ok" if passed else ("warn" if not required else "fail")
+        print(f"{state}: {name} - {detail}")
+    try:
+        disks = probe_disks()
+        print(f"ok: disk probe - {len(disks)} candidate disk(s)")
+    except Exception as exc:
+        ok = False
+        print(f"fail: disk probe - {exc}")
+    return 0 if ok else 1
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="CRIXA Dockyard installer")
+    parser.add_argument("--self-test", action="store_true", help="validate Dockyard dependencies and backend access")
+    parser.add_argument("--tui", action="store_true", help="run terminal/TTY installer")
+    return parser
 
 
 def main() -> int:
-    if not Path(INSTALLER_BIN).exists():
-        messagebox.showerror("Missing Installer", f"Installer backend not found:\n{INSTALLER_BIN}")
+    parser = build_parser()
+    args = parser.parse_args()
+    if args.tui:
+        return run_tui(args)
+    if args.self_test:
+        return run_self_test(tui=False)
+    if QT_IMPORT_ERROR is not None:
+        print(f"{APP_NAME} requires python3-pyside2.qtwidgets: {QT_IMPORT_ERROR}", file=sys.stderr)
         return 1
-    app = CrixaInstaller()
-    app.mainloop()
-    return 0
+    app = QtWidgets.QApplication(sys.argv)
+    app.setApplicationName(APP_NAME)
+    app.setWindowIcon(QtGui.QIcon.fromTheme("crixa-installer"))
+    app.setStyleSheet(stylesheet())
+    window = DockyardWindow()
+    window.show()
+    return int(app.exec_())
 
 
 if __name__ == "__main__":
